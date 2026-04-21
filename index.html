@@ -2,131 +2,156 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Statu Hunt - Multiplayer Live</title>
+    <title>Statu Hunt - Version Intégrale</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
-        body { margin: 0; background: #1a1a1a; color: white; font-family: sans-serif; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; }
-        #lobby { background: #2c3e50; padding: 30px; border-radius: 15px; text-align: center; width: 500px; box-shadow: 0 0 20px rgba(0,0,0,0.5); z-index: 10; }
-        input { padding: 12px; border-radius: 8px; border: none; width: 80%; margin-bottom: 15px; text-align: center; font-size: 1rem; }
-        button { padding: 12px 24px; border-radius: 8px; border: none; cursor: pointer; font-weight: bold; background: #3498db; color: white; margin: 5px; }
-        button:disabled { background: #7f8c8d; opacity: 0.6; }
-        .teams { display: flex; gap: 10px; margin-top: 20px; }
-        .team-box { flex: 1; background: #34495e; padding: 10px; border-radius: 10px; min-height: 100px; }
+        body { margin: 0; background: #1a1a1a; color: white; font-family: 'Segoe UI', Tahoma, sans-serif; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        
+        /* --- STYLES LOBBY --- */
+        #lobby { background: #2c3e50; padding: 30px; border-radius: 15px; text-align: center; width: 550px; box-shadow: 0 0 30px rgba(0,0,0,0.5); z-index: 100; border: 1px solid #34495e; }
+        .input-group { margin: 20px 0; }
+        input { padding: 12px; border-radius: 8px; border: none; width: 80%; text-align: center; font-size: 1rem; background: #1a1a1a; color: white; }
+        button { padding: 12px 24px; border-radius: 8px; border: none; cursor: pointer; font-weight: bold; transition: 0.2s; margin: 5px; }
+        .btn-blue { background: #3498db; color: white; }
+        .btn-red { background: #e74c3c; color: white; }
+        .btn-green { background: #27ae60; color: white; width: 100%; margin-top: 15px; }
+        button:disabled { background: #7f8c8d; cursor: not-allowed; opacity: 0.5; }
+        
+        .code-display { background: rgba(0,0,0,0.3); padding: 15px; border-radius: 10px; margin-bottom: 20px; display: flex; justify-content: center; align-items: center; gap: 15px; }
+        .teams { display: flex; gap: 15px; margin-top: 20px; }
+        .team-box { flex: 1; background: #34495e; padding: 10px; border-radius: 10px; min-height: 150px; border: 1px solid #2c3e50; }
+        .player-tag { background: rgba(0,0,0,0.2); padding: 8px; margin: 5px 0; border-radius: 6px; font-size: 0.9rem; border-left: 4px solid #f1c40f; text-align: left; }
+        
+        /* --- STYLES JEU --- */
+        canvas { position: absolute; top: 0; left: 0; display: none; background: #111; }
+        #ui-game { position: absolute; top: 20px; left: 20px; z-index: 50; display: none; pointer-events: none; }
+        .fear-bar { width: 200px; height: 12px; background: #333; border: 2px solid white; margin-top: 10px; }
+        #fear-fill { width: 0%; height: 100%; background: #e74c3c; }
         .hidden { display: none !important; }
-        canvas { position: absolute; top: 0; left: 0; background: #111; display: none; }
-        #ui-game { position: absolute; top: 20px; left: 20px; z-index: 5; display: none; pointer-events: none; }
     </style>
 </head>
 <body>
 
     <div id="lobby">
-        <div id="step-1">
-            <h1>STATU HUNT</h1>
-            <input type="text" id="pseudoInput" placeholder="Ton pseudo...">
-            <br><button onclick="confirmPseudo()">CONTINUER</button>
+        <h1>STATU HUNT</h1>
+        
+        <div id="step-pseudo">
+            <h3>PSEUDO</h3>
+            <input type="text" id="pseudoInput" placeholder="Ton nom..." onkeydown="if(event.key==='Enter') confirmPseudo()">
+            <br><button class="btn-blue" onclick="confirmPseudo()">CONTINUER</button>
         </div>
 
-        <div id="step-2" class="hidden">
-            <button onclick="createRoom()">CRÉER UNE SALLE</button>
+        <div id="step-menu" class="hidden">
+            <button class="btn-blue" onclick="createRoom()">CRÉER UNE SALLE</button>
             <p>— OU —</p>
             <input type="text" id="joinInput" placeholder="CODE DE PARTIE">
-            <br><button onclick="joinRoom()">REJOINDRE</button>
+            <br><button class="btn-blue" onclick="joinRoom()">REJOINDRE</button>
         </div>
 
-        <div id="step-3" class="hidden">
-            <p>CODE : <span id="displayCode" style="color:#f1c40f; font-weight:bold;">---</span></p>
-            <div class="teams">
-                <div class="team-box"><button onclick="selectTeam('seeker')">CHERCHEURS</button><div id="list-seekers"></div></div>
-                <div class="team-box"><button onclick="selectTeam('hider')" style="background:#e74c3c">CACHÉS</button><div id="list-hiders"></div></div>
+        <div id="step-room" class="hidden">
+            <div class="code-display">
+                CODE : <span id="displayCode" style="color:#f1c40f; font-weight:bold; font-size:1.5rem;">---</span>
+                <button id="copyBtn" style="background:#95a5a6; padding:5px 10px; font-size:0.8rem;" onclick="copyCode()">COPIER 📋</button>
             </div>
-            <button id="startBtn" class="hidden" onclick="requestStart()" style="background:#27ae60; width:100%; margin-top:20px;">LANCER</button>
+            
+            <div class="teams">
+                <div class="team-box">
+                    <h4 style="color:#3498db">CHERCHEURS</h4>
+                    <button onclick="selectTeam('seeker')" class="btn-blue" style="font-size:0.7rem">REJOINDRE</button>
+                    <div id="list-seekers"></div>
+                </div>
+                <div class="team-box">
+                    <h4 style="color:#e74c3c">CACHÉS</h4>
+                    <button onclick="selectTeam('hider')" class="btn-red" style="font-size:0.7rem">REJOINDRE</button>
+                    <div id="list-hiders"></div>
+                </div>
+            </div>
+            <button id="startBtn" class="hidden btn-green" onclick="requestStart()" disabled>ATTENTE DES ÉQUIPES...</button>
         </div>
     </div>
 
     <div id="ui-game">
-        <div id="game-status" style="font-size: 1.5rem; color: #f1c40f;">PRÉPARATION...</div>
-        <div id="fear-container" style="width: 200px; height: 10px; background: #333; margin-top: 10px;">
-            <div id="fear-fill" style="width: 0%; height: 100%; background: #e74c3c;"></div>
-        </div>
+        <div id="game-status" style="color:#f1c40f; font-weight:bold; font-size:1.2rem;">PRÉPARATION...</div>
+        <div class="fear-bar"><div id="fear-fill"></div></div>
     </div>
     <canvas id="gameCanvas"></canvas>
 
 <script>
-    // --- VARIABLES GLOBALES ---
-    let myPseudo, myId, isHost = false, players = {}, peer, conn, gameActive = false, prepTimer = 10;
+    let myPseudo, myId, isHost = false, players = {}, peer, conn, gameActive = false;
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
-    const mapW = 1500, mapH = 1200;
-    const keys = {};
-    const statues = [];
+    const mapW = 1500, mapH = 1200, keys = {}, statues = [];
     let mousePos = { x: 0, y: 0 };
 
-    // --- LOBBY LOGIQUE ---
+    // --- LOBBY & PSEUDO ---
     function confirmPseudo() {
         myPseudo = document.getElementById('pseudoInput').value.trim();
-        if(myPseudo.length >= 2) {
-            document.getElementById('step-1').classList.add('hidden');
-            document.getElementById('step-2').classList.remove('hidden');
-        }
+        if(myPseudo.length < 2) return alert("Pseudo trop court !");
+        document.getElementById('step-pseudo').classList.add('hidden');
+        document.getElementById('step-menu').classList.remove('hidden');
     }
 
+    function copyCode() {
+        const code = document.getElementById('displayCode').innerText;
+        navigator.clipboard.writeText(code).then(() => {
+            const btn = document.getElementById('copyBtn');
+            btn.innerText = "COPIÉ ! ✅";
+            setTimeout(() => btn.innerText = "COPIER 📋", 2000);
+        });
+    }
+
+    // --- RÉSEAU ---
     function createRoom() {
         const code = Math.random().toString(36).substring(2, 7).toUpperCase();
         isHost = true;
         setupPeer('SH-' + code);
-        document.getElementById('displayCode').innerText = code;
-        document.getElementById('step-2').classList.add('hidden');
-        document.getElementById('step-3').classList.remove('hidden');
+        showRoom(code);
         document.getElementById('startBtn').classList.remove('hidden');
-        setTimeout(() => { players[myId] = {pseudo: myPseudo, team: null, x: 200, y: 200, angle: 0, fear: 0}; }, 500);
+        setTimeout(() => { players[myId] = {pseudo: myPseudo, team: null, x: 200, y: 200, angle: 0, fear: 0}; refreshUI(); }, 500);
     }
 
     function joinRoom() {
         const code = document.getElementById('joinInput').value.toUpperCase().trim();
+        if(code.length < 5) return alert("Code invalide");
         setupPeer();
         setTimeout(() => {
             conn = peer.connect('SH-' + code);
             initConn(conn);
         }, 800);
-        document.getElementById('displayCode').innerText = code;
-        document.getElementById('step-2').classList.add('hidden');
-        document.getElementById('step-3').classList.remove('hidden');
+        showRoom(code);
     }
 
     function setupPeer(id = null) {
         peer = new Peer(id);
-        peer.on('open', (id) => { myId = id; });
+        peer.on('open', (id) => myId = id);
         peer.on('connection', (c) => {
             conn = c;
             initConn(c);
-            if(isHost) setTimeout(() => { c.send({type:'SYNC', players: players}); }, 1000);
+            if(isHost) setTimeout(() => c.send({type:'SYNC', players: players}), 1000);
         });
     }
 
     function initConn(c) {
-        c.on('open', () => { c.send({type: 'JOIN', pseudo: myPseudo}); });
+        c.on('open', () => {
+            c.send({type: 'JOIN', pseudo: myPseudo});
+        });
         c.on('data', (data) => {
             if(data.type === 'JOIN') {
-                players[c.peer] = {pseudo: data.pseudo, team: null, x: 200, y: 200, angle: 0, fear: 0};
+                players[c.peer] = {pseudo: data.pseudo, team: null, x: 750, y: 600, angle: 0, fear: 0};
                 if(isHost) broadcast({type:'SYNC', players: players});
             }
             if(data.type === 'SYNC') { players = data.players; refreshUI(); }
-            if(data.type === 'START') { startClientGame(); }
-            if(data.type === 'UPDATE_POS') { 
-                if(players[data.id]) {
-                    players[data.id].x = data.x;
-                    players[data.id].y = data.y;
-                    players[data.id].angle = data.angle;
-                    players[data.id].fear = data.fear;
-                }
-            }
+            if(data.type === 'START') startClientGame();
+            if(data.type === 'POS') { if(players[data.id]) players[data.id] = {...players[data.id], ...data}; }
         });
     }
+
+    function broadcast(data) { if(conn && conn.open) conn.send(data); }
 
     function selectTeam(t) {
         if(players[myId]) players[myId].team = t;
         refreshUI();
-        if(conn) conn.send({type:'SYNC', players: players});
+        if(conn) conn.send({type: 'SYNC', players: players});
     }
 
     function refreshUI() {
@@ -135,22 +160,25 @@
         let sCount = 0, hCount = 0;
         for(let id in players) {
             const p = players[id];
-            const div = document.createElement('div'); div.innerText = p.pseudo;
+            const div = document.createElement('div'); div.className = 'player-tag';
+            div.innerText = p.pseudo + (id === myId ? " (Moi)" : "");
             if(p.team === 'seeker') { sDiv.appendChild(div); sCount++; }
             if(p.team === 'hider') { hDiv.appendChild(div); hCount++; }
         }
-        if(isHost) document.getElementById('startBtn').disabled = !(sCount > 0 && hCount > 0);
-    }
-
-    function broadcast(data) { if(conn && conn.open) conn.send(data); }
-
-    // --- TRANSITION VERS LE JEU ---
-    function requestStart() {
         if(isHost) {
-            broadcast({type: 'START'});
-            startClientGame();
+            const btn = document.getElementById('startBtn');
+            btn.disabled = !(sCount > 0 && hCount > 0);
         }
     }
+
+    function showRoom(code) {
+        document.getElementById('step-menu').classList.add('hidden');
+        document.getElementById('step-room').classList.remove('hidden');
+        document.getElementById('displayCode').innerText = code;
+    }
+
+    // --- JEU & TRANSITION ---
+    function requestStart() { if(isHost) { broadcast({type: 'START'}); startClientGame(); } }
 
     function startClientGame() {
         document.getElementById('lobby').style.display = 'none';
@@ -158,15 +186,11 @@
         canvas.style.display = 'block';
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
-        
-        // Créer les statues (identiques pour tous car aléatoire basé sur le code salle possible, mais ici simple)
         for(let i=0; i<80; i++) statues.push({x: Math.random()*mapW, y: Math.random()*mapH});
-        
         gameActive = true;
         gameLoop();
     }
 
-    // --- BOUCLE DE JEU ---
     window.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
     window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
     window.addEventListener('mousemove', e => { mousePos.x = e.clientX; mousePos.y = e.clientY; });
@@ -187,64 +211,64 @@
         if(keys['q'] || keys['a']) { me.x -= 4; moved = true; }
         if(keys['d']) { me.x += 4; moved = true; }
 
-        me.x = Math.max(0, Math.min(mapW, me.x));
-        me.y = Math.max(0, Math.min(mapH, me.y));
+        // Limites Map
+        me.x = Math.max(0, Math.min(mapW - 25, me.x));
+        me.y = Math.max(0, Math.min(mapH - 25, me.y));
 
         if(me.team === 'seeker') {
-            const screenCX = canvas.width/2, screenCY = canvas.height/2;
-            me.angle = Math.atan2(mousePos.y - screenCY, mousePos.x - screenCX);
+            const sCX = canvas.width/2, sCY = canvas.height/2;
+            me.angle = Math.atan2(mousePos.y - sCY, mousePos.x - sCX);
         } else {
             if(!moved) me.fear = Math.min(100, me.fear + 0.2);
             else me.fear = Math.max(0, me.fear - 0.5);
             document.getElementById('fear-fill').style.width = me.fear + "%";
         }
 
-        // Envoyer ma position aux autres
         if(conn && conn.open) {
-            conn.send({type: 'UPDATE_POS', id: myId, x: me.x, y: me.y, angle: me.angle, fear: me.fear});
+            conn.send({type: 'POS', id: myId, x: me.x, y: me.y, angle: me.angle, fear: me.fear});
         }
     }
 
     function draw() {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
         const me = players[myId];
         if(!me) return;
-
-        const camX = -me.x + canvas.width/2;
-        const camY = -me.y + canvas.height/2;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        const camX = -me.x + canvas.width/2, camY = -me.y + canvas.height/2;
 
         ctx.save();
         ctx.translate(camX, camY);
-
-        // Map
-        ctx.fillStyle = "#222";
-        ctx.fillRect(0, 0, mapW, mapH);
+        ctx.fillStyle = "#111"; ctx.fillRect(0,0, mapW, mapH);
+        ctx.strokeStyle = "#444"; ctx.strokeRect(0,0, mapW, mapH);
 
         // Statues
         ctx.fillStyle = "#7f8c8d";
         statues.forEach(s => ctx.fillRect(s.x, s.y, 25, 25));
 
-        // Autres joueurs
+        // Joueurs
         for(let id in players) {
             const p = players[id];
             if(p.team === 'hider') {
-                ctx.fillStyle = (p.fear > 80) ? "#e74c3c" : "#7f8c8d";
+                ctx.fillStyle = (p.fear > 85) ? "#e74c3c" : "#7f8c8d";
                 ctx.fillRect(p.x, p.y, 25, 25);
-            } else if (p.team === 'seeker') {
+                if(p.fear >= 100) { // Sonar de peur
+                    ctx.beginPath(); ctx.arc(p.x+12, p.y+12, (Date.now()%1000)/5, 0, Math.PI*2);
+                    ctx.strokeStyle = "rgba(231, 76, 60, 0.5)"; ctx.stroke();
+                }
+            } else if(p.team === 'seeker') {
                 ctx.fillStyle = "#3498db";
                 ctx.fillRect(p.x, p.y, 25, 25);
             }
         }
         ctx.restore();
 
-        // Lampe torche si je suis chercheur
+        // Lampe Torche Cône (Uniquement pour le Chercheur)
         if(me.team === 'seeker') {
             ctx.save();
-            ctx.fillStyle = "rgba(0,0,0,0.9)";
+            ctx.fillStyle = "rgba(0,0,0,0.95)";
             ctx.beginPath();
             ctx.rect(0,0, canvas.width, canvas.height);
-            ctx.moveTo(canvas.width/2, canvas.height/2);
-            ctx.arc(canvas.width/2, canvas.height/2, 400, me.angle - 0.5, me.angle + 0.5);
+            ctx.moveTo(canvas.width/2+12, canvas.height/2+12);
+            ctx.arc(canvas.width/2+12, canvas.height/2+12, 450, me.angle - 0.5, me.angle + 0.5);
             ctx.fill("evenodd");
             ctx.restore();
         }
