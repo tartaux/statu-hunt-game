@@ -133,6 +133,57 @@
             if(data.type === 'SYNC_ALL') {
                 players = data.players;
                 updateLobbyUI();
+                // ... (garder le début du script identique jusqu'à updateLobbyUI) ...
+
+function updateLobbyUI() {
+    const listSeekers = document.getElementById('list-seekers');
+    const listHiders = document.getElementById('list-hiders');
+    listSeekers.innerHTML = '';
+    listHiders.innerHTML = '';
+
+    let countSeekers = 0;
+    let countHiders = 0;
+
+    for(let id in players) {
+        const p = players[id];
+        const el = document.createElement('div');
+        el.className = 'player-name';
+        el.innerText = p.pseudo + (id === myId ? " (Moi)" : "");
+        
+        if(p.team === 'seeker') {
+            listSeekers.appendChild(el);
+            countSeekers++;
+        }
+        if(p.team === 'hider') {
+            listHiders.appendChild(el);
+            countHiders++;
+        }
+    }
+
+    // MISE À JOUR DES BOUTONS DE COMPTAGE (Optionnel visuellement)
+    document.querySelector('.team-chercheur h3').innerText = `CHERCHEURS (${countSeekers})`;
+    document.querySelector('.team-cache h3').innerText = `CACHÉS (${countHiders})`;
+
+    // RESTRICTION POUR LANCER LA PARTIE
+    if(isHost) {
+        const startBtn = document.getElementById('startBtn');
+        // On ne montre le bouton que si les deux équipes ont au moins 1 joueur
+        if(countSeekers > 0 && countHiders > 0) {
+            startBtn.classList.remove('hidden');
+            startBtn.disabled = false;
+            startBtn.style.opacity = "1";
+            startBtn.innerText = "LANCER LA PARTIE";
+        } else {
+            startBtn.classList.remove('hidden'); // On le laisse visible pour que l'hôte comprenne
+            startBtn.disabled = true;
+            startBtn.style.opacity = "0.5";
+            startBtn.style.cursor = "not-allowed";
+            startBtn.innerText = "ATTENTE DES ÉQUIPES...";
+        }
+    }
+}
+
+// ... (le reste des fonctions confirmPseudo, createRoom, etc. reste inchangé) ...
             }
             if(data.type === 'TEAM_CHANGE') {
                 if(players[data.id]) {
