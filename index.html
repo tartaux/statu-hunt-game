@@ -2,36 +2,28 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Statu Hunt - Final V4 Fixed</title>
+    <title>Statu Hunt - V4.1 Fixed</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         body { margin: 0; background: #1a1a1a; color: white; font-family: 'Segoe UI', sans-serif; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; }
-        
-        /* LOBBY & UI */
         #lobby, #end-screen { background: #2c3e50; padding: 30px; border-radius: 15px; text-align: center; width: 550px; box-shadow: 0 0 30px rgba(0,0,0,0.5); z-index: 100; border: 1px solid #34495e; position: absolute; }
-        
-        /* Correction ici : display none par défaut pour ne pas bloquer les clics */
         #end-screen { display: none; background: rgba(44, 62, 80, 0.98); z-index: 200; }
-        
         input { padding: 12px; border-radius: 8px; border: none; width: 80%; text-align: center; font-size: 1rem; background: #1a1a1a; color: white; margin-bottom: 10px; }
         button { padding: 10px 20px; border-radius: 8px; border: none; cursor: pointer; font-weight: bold; transition: 0.2s; margin: 5px; position: relative; z-index: 150; }
         .btn-blue { background: #3498db; color: white; }
         .btn-red { background: #e74c3c; color: white; }
         .btn-green { background: #27ae60; color: white; width: 100%; margin-top: 15px; font-size: 1.1rem; }
         button:disabled { background: #7f8c8d; cursor: not-allowed; opacity: 0.5; }
-        
         .config-box { background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px; margin: 15px 0; }
         .teams, .end-teams { display: flex; gap: 15px; margin-top: 20px; }
         .team-box { flex: 1; background: #34495e; padding: 10px; border-radius: 10px; min-height: 150px; }
         .player-tag { background: rgba(0,0,0,0.2); padding: 8px; margin: 5px 0; border-radius: 6px; font-size: 0.9rem; border-left: 4px solid #f1c40f; text-align: left; }
-        
         canvas { position: absolute; top: 0; left: 0; display: none; background: #000; }
         #ui-game { position: absolute; top: 20px; left: 20px; z-index: 50; display: none; pointer-events: none; }
         .fear-bar-container { width: 250px; background: rgba(0,0,0,0.5); padding: 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); }
         .fear-bar { width: 100%; height: 12px; background: #333; border-radius: 6px; overflow: hidden; margin-top: 5px; }
         #fear-fill { width: 0%; height: 100%; background: #e74c3c; }
         .hidden { display: none !important; }
-        
         #victory-title { font-size: 2.5rem; margin-bottom: 10px; text-transform: uppercase; }
         .win-text { color: #2ecc71; }
         .lose-text { color: #e74c3c; }
@@ -45,14 +37,12 @@
             <input type="text" id="pseudoInput" placeholder="Ton pseudo..." onkeydown="if(event.key==='Enter') confirmPseudo()">
             <br><button class="btn-blue" onclick="confirmPseudo()">CONTINUER</button>
         </div>
-
         <div id="step-menu" class="hidden">
             <button class="btn-blue" onclick="createRoom()">CRÉER UNE SALLE</button>
             <p>— OU —</p>
             <input type="text" id="joinInput" placeholder="CODE DE PARTIE">
             <br><button class="btn-blue" onclick="joinRoom()">REJOINDRE</button>
         </div>
-
         <div id="step-room" class="hidden">
             <div style="background: rgba(0,0,0,0.3); padding: 10px; border-radius: 8px;">
                 CODE : <span id="displayCode" style="color:#f1c40f; font-weight:bold;">---</span>
@@ -111,12 +101,12 @@
 
     function createRoom() {
         roomCode = Math.random().toString(36).substring(2, 7).toUpperCase();
-        isHost = true; setupPeer('SH-' + roomCode); showRoom(roomCode);
+        isHost = true;
+        setupPeer('SH-' + roomCode);
+        showRoom(roomCode);
         document.getElementById('startBtn').classList.remove('hidden');
         document.getElementById('backToLobbyBtn').style.display = 'block';
         document.getElementById('waitHostText').style.display = 'none';
-        players[myId] = {pseudo: myPseudo, team: null, x: 750, y: 600, angle: 0, fear: 0};
-        refreshUI();
     }
 
     function joinRoom() {
@@ -134,7 +124,12 @@
 
     function setupPeer(id = null) {
         peer = new Peer(id);
-        peer.on('open', (i) => myId = i);
+        peer.on('open', (i) => {
+            myId = i;
+            // On s'enregistre soi-même dès que l'ID est prêt
+            players[myId] = {pseudo: myPseudo, team: null, x: 750, y: 600, angle: 0, fear: 0};
+            refreshUI();
+        });
         peer.on('connection', (c) => {
             conn = c; initConn(c);
             if(isHost) setTimeout(() => {
@@ -162,6 +157,34 @@
 
     function broadcast(data) { if(conn && conn.open) conn.send(data); }
 
+    function selectTeam(t) {
+        if(!myId || !players[myId]) return; // Sécurité si l'ID n'est pas encore prêt
+        players[myId].team = t;
+        refreshUI();
+        if(conn) {
+            if(isHost) broadcast({type: 'SYNC', players: players});
+            else conn.send({type: 'SYNC', players: players});
+        }
+    }
+
+    function refreshUI() {
+        const sDiv = document.getElementById('list-seekers'), hDiv = document.getElementById('list-hiders');
+        if(!sDiv || !hDiv) return;
+        sDiv.innerHTML = ''; hDiv.innerHTML = '';
+        let sCount = 0, hCount = 0;
+        for(let id in players) {
+            let p = players[id];
+            let tag = `<div class="player-tag">${p.pseudo}${id === myId ? " (Moi)" : ""}</div>`;
+            if(p.team === 'seeker') { sCount++; sDiv.innerHTML += tag; }
+            if(p.team === 'hider') { hCount++; hDiv.innerHTML += tag; }
+        }
+        if(isHost) {
+            const btn = document.getElementById('startBtn');
+            btn.disabled = !(sCount > 0 && hCount > 0);
+            btn.innerText = (sCount > 0 && hCount > 0) ? "LANCER LA PARTIE" : "ÉQUIPES INCOMPLÈTES...";
+        }
+    }
+
     function changeTimer(val) {
         if(!isHost) return;
         gameDuration = Math.max(60, Math.min(300, gameDuration + val));
@@ -173,27 +196,6 @@
     function updateTimerDisplay() {
         let m = Math.floor(gameDuration/60), s = gameDuration%60;
         document.getElementById('timerSetting').innerText = `${m}:${s === 0 ? '00' : s}`;
-    }
-
-    function selectTeam(t) {
-        if(players[myId]) players[myId].team = t;
-        refreshUI();
-        if(conn) conn.send({type: 'SYNC', players: players});
-    }
-
-    function refreshUI() {
-        const sDiv = document.getElementById('list-seekers'), hDiv = document.getElementById('list-hiders');
-        sDiv.innerHTML = ''; hDiv.innerHTML = '';
-        let sCount = 0, hCount = 0;
-        for(let id in players) {
-            if(players[id].team === 'seeker') { sCount++; sDiv.innerHTML += `<div class="player-tag">${players[id].pseudo}</div>`; }
-            if(players[id].team === 'hider') { hCount++; hDiv.innerHTML += `<div class="player-tag">${players[id].pseudo}</div>`; }
-        }
-        if(isHost) {
-            const btn = document.getElementById('startBtn');
-            btn.disabled = !(sCount > 0 && hCount > 0);
-            btn.innerText = (sCount > 0 && hCount > 0) ? "LANCER LA PARTIE" : "ÉQUIPES INCOMPLÈTES...";
-        }
     }
 
     function copyCode() {
@@ -217,13 +219,10 @@
         document.getElementById('ui-game').style.display = 'block';
         canvas.style.display = 'block';
         canvas.width = window.innerWidth; canvas.height = window.innerHeight;
-        
         statues.length = 0;
         generateMap(roomCode);
-        
         gameActive = true; gameState = "PREP"; prepTimer = 10;
         lastUpdate = Date.now();
-        
         logicInterval = setInterval(update, 1000/60);
         masterTimer = setInterval(() => {
             if(gameState === "PREP") {
@@ -247,21 +246,18 @@
         gameActive = false;
         clearInterval(logicInterval);
         clearInterval(masterTimer);
-        
         document.getElementById('ui-game').style.display = 'none';
         document.getElementById('end-screen').style.display = 'block';
-        
         const title = document.getElementById('victory-title');
         title.innerText = (winner === 'seekers') ? "Victoire Chercheurs !" : "Victoire Cachés !";
-        title.className = (players[myId].team.startsWith(winner.substring(0,1))) ? "win-text" : "lose-text";
+        title.className = (players[myId].team && players[myId].team.startsWith(winner.substring(0,1))) ? "win-text" : "lose-text";
         document.getElementById('victory-desc').innerText = reason;
-
         const sList = document.getElementById('end-seekers'), hList = document.getElementById('end-hiders');
         sList.innerHTML = ''; hList.innerHTML = '';
         for(let id in players) {
             let div = `<div class="player-tag">${players[id].pseudo}</div>`;
             if(players[id].team === 'seeker') sList.innerHTML += div;
-            else hList.innerHTML += div;
+            else if(players[id].team === 'hider') hList.innerHTML += div;
         }
     }
 
@@ -309,7 +305,6 @@
         const now = Date.now();
         const dt = (now - lastUpdate) / 16.66;
         lastUpdate = now;
-
         let moved = false;
         if(gameState === "HUNT" || me.team === "hider") {
             let spd = 5 * dt;
@@ -320,7 +315,6 @@
         }
         me.x = Math.max(0, Math.min(mapW - 25, me.x));
         me.y = Math.max(0, Math.min(mapH - 25, me.y));
-
         if(me.team === 'seeker') {
             me.angle = Math.atan2(mousePos.y - canvas.height/2, mousePos.x - canvas.width/2);
             if(gameState === "HUNT" && isHost) {
@@ -371,10 +365,6 @@
                 ctx.arc(canvas.width/2+12, canvas.height/2+12, 450, me.angle-0.5, me.angle+0.5);
             }
             ctx.fill("evenodd"); 
-            if(gameState === "PREP") {
-                ctx.fillStyle = "white"; ctx.textAlign = "center"; ctx.font = "20px Arial";
-                ctx.fillText("LES JOUEURS SE CACHENT...", canvas.width/2, canvas.height/2 + 50);
-            }
             ctx.restore();
         } else {
             document.getElementById('fear-ui').classList.remove('hidden');
