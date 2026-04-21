@@ -147,7 +147,7 @@
         peer = new Peer(id);
         peer.on('open', (i) => {
             myId = i;
-            players[myId] = {pseudo: myPseudo, team: null, x: 1000, y: 1000, angle: 0, fear: 0};
+            players[myId] = {pseudo: myPseudo, team: null, x: 1000, y: 1000, angle: 0, fear: 0, isMoving: false};
             refreshUI();
         });
         peer.on('connection', (c) => {
@@ -162,7 +162,7 @@
 
     function initConn(c) {
         c.on('data', (data) => {
-            if(data.type === 'JOIN') { players[c.peer] = {pseudo: data.pseudo, team: null, x: 1000, y: 1000, angle: 0, fear: 0}; if(isHost) broadcast({type:'SYNC', players: players}); }
+            if(data.type === 'JOIN') { players[c.peer] = {pseudo: data.pseudo, team: null, x: 1000, y: 1000, angle: 0, fear: 0, isMoving: false}; if(isHost) broadcast({type:'SYNC', players: players}); }
             if(data.type === 'SYNC') { players = data.players; refreshUI(); }
             if(data.type === 'SYNC_TIMER') { gameDuration = data.duration; updateTimerDisplay(); }
             if(data.type === 'SYNC_SIZE') { 
@@ -179,7 +179,7 @@
             }
             if(data.type === 'POS') { if(players[data.id]) players[data.id] = {...players[data.id], ...data}; }
             
-            if(data.type === 'SHOCKWAVE') { waves.push({x: data.x, y: data.y, r: 0, maxR: 630, owner: data.owner}); }
+            if(data.type === 'SHOCKWAVE') { waves.push({x: data.x, y: data.y, r: 0, maxR: mapW, owner: data.owner}); }
             if(data.type === 'FEAR_HIT' && data.targetId === myId) { players[myId].fear = Math.min(100, players[myId].fear + data.amount); }
             if(data.type === 'PING_BACK' && data.seekerId === myId) {
                 detectionArrows.push({angle: data.angle, life: 60});
@@ -284,6 +284,7 @@
             if(keys['q'] || keys['a']) { me.x -= spd; moved = true; }
             if(keys['d']) { me.x += spd; moved = true; }
         }
+        me.isMoving = moved;
 
         me.x = Math.max(15, Math.min(mapW - 35, me.x));
         me.y = Math.max(15, Math.min(mapH - 35, me.y));
@@ -333,7 +334,7 @@
         } else if(gameState === "HUNT") {
             if(!moved) me.fear = Math.min(100, me.fear + 0.4 * dt); else me.fear = Math.max(0, me.fear - 1.2 * dt);
         }
-        if(conn && conn.open) conn.send({type: 'POS', id: myId, x: me.x, y: me.y, angle: me.angle, fear: me.fear});
+        if(conn && conn.open) conn.send({type: 'POS', id: myId, x: me.x, y: me.y, angle: me.angle, fear: me.fear, isMoving: me.isMoving});
     }
 
     function draw() {
@@ -345,7 +346,7 @@
         ctx.save(); ctx.translate(camX, camY);
         ctx.strokeStyle = "#f1c40f"; ctx.lineWidth = 10; ctx.strokeRect(0,0, mapW, mapH);
         ctx.fillStyle = "#111"; ctx.fillRect(0,0, mapW, mapH);
-        statues.forEach(s => drawStatue(s.x, s.y, "#555", false, false));
+        statues.forEach(s => drawStatue(s.x, s.y, "#555", false, false, false));
 
         waves.forEach(w => {
             ctx.beginPath();
@@ -359,15 +360,17 @@
             let p = players[id];
             if(p.team === 'hider') {
                 let isMe = (id === myId);
-                let color = (isMe || me.team !== 'seeker') && p.fear > 80 ? "#962d22" : "#555";
+                let baseColor = p.isMoving ? "#333" : "#555"; 
+                let color = (isMe || me.team !== 'seeker') && p.fear > 80 ? "#962d22" : baseColor;
                 let ox = (p.fear > 80) ? (Math.sin(Date.now() / 40) * 1.5) : 0;
-                drawStatue(p.x + ox, p.y, color, p.fear >= 100, isMe);
+                drawStatue(p.x + ox, p.y, color, p.fear >= 100, isMe, p.isMoving);
             } else { drawSeeker(p); }
         }
         ctx.restore();
 
         drawLighting(me);
 
+        // Flèches dessinées APRÈS la lumière pour être visibles dans le noir
         if(me.team === 'seeker') {
             detectionArrows.forEach(arr => {
                 ctx.save();
@@ -375,7 +378,6 @@
                 ctx.rotate(arr.angle);
                 ctx.fillStyle = `rgba(241, 196, 15, ${arr.life / 60})`;
                 ctx.beginPath();
-                // Flèche agrandie de 40% (60*1.4=84, 45*1.4=63, 10*1.4=14)
                 ctx.moveTo(84, 0); ctx.lineTo(63, -14); ctx.lineTo(63, 14); ctx.closePath();
                 ctx.fill();
                 ctx.restore();
@@ -389,7 +391,7 @@
         requestAnimationFrame(draw);
     }
 
-    function drawStatue(x, y, color, pulse, isSelf) {
+    function drawStatue(x, y, color, pulse, isSelf, moving) {
         ctx.fillStyle = "rgba(0,0,0,0.4)"; ctx.beginPath(); ctx.ellipse(x+12, y+28, 15, 6, 0, 0, Math.PI*2); ctx.fill();
         ctx.fillStyle = color; ctx.fillRect(x, y, 25, 25);
         if(isSelf) { ctx.fillStyle = "#f1c40f"; ctx.fillRect(x+10, y-5, 5, 5); }
@@ -463,8 +465,13 @@
         document.getElementById('end-screen').style.display = 'none'; 
         document.getElementById('lobby').style.display = 'block'; 
         waves.length = 0; detectionArrows.length = 0;
-        for(let id in players) { players[id].fear = 0; }
+        for(let id in players) { players[id].fear = 0; players[id].isMoving = false; }
         document.getElementById('fear-fill').style.width = "0%";
+        
+        // Reset du timer à la valeur sélectionnée dans l'UI
+        let timeParts = document.getElementById('timerSetting').innerText.split(':');
+        gameDuration = parseInt(timeParts[0]) * 60 + parseInt(timeParts[1]);
+        
         updateTimerDisplay(); refreshUI(); 
     }
 
@@ -481,7 +488,7 @@
             if(now - lastShockwave > 4000) {
                 lastShockwave = now;
                 let waveData = {type: 'SHOCKWAVE', x: me.x + 12, y: me.y + 12, owner: myId};
-                waves.push({x: waveData.x, y: waveData.y, r: 0, maxR: 630, owner: myId});
+                waves.push({x: waveData.x, y: waveData.y, r: 0, maxR: mapW, owner: myId});
                 broadcast(waveData);
             }
         }
