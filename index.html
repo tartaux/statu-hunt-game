@@ -2,12 +2,10 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Statu Hunt - Final Sync</title>
+    <title>Statu Hunt - Final Gameplay</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         body { margin: 0; background: #1a1a1a; color: white; font-family: 'Segoe UI', sans-serif; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; }
-        
-        /* LOBBY */
         #lobby { background: #2c3e50; padding: 30px; border-radius: 15px; text-align: center; width: 550px; box-shadow: 0 0 30px rgba(0,0,0,0.5); z-index: 100; }
         .input-group { margin: 20px 0; }
         input { padding: 12px; border-radius: 8px; border: none; width: 80%; text-align: center; font-size: 1rem; background: #1a1a1a; color: white; }
@@ -16,18 +14,15 @@
         .btn-red { background: #e74c3c; color: white; }
         .btn-green { background: #27ae60; color: white; width: 100%; margin-top: 15px; }
         button:disabled { background: #7f8c8d; cursor: not-allowed; opacity: 0.5; }
-        
         .code-display { background: rgba(0,0,0,0.3); padding: 15px; border-radius: 10px; margin-bottom: 20px; display: flex; justify-content: center; align-items: center; gap: 15px; }
         .teams { display: flex; gap: 15px; margin-top: 20px; }
         .team-box { flex: 1; background: #34495e; padding: 10px; border-radius: 10px; min-height: 150px; }
         .player-tag { background: rgba(0,0,0,0.2); padding: 8px; margin: 5px 0; border-radius: 6px; font-size: 0.9rem; border-left: 4px solid #f1c40f; text-align: left; }
-        
-        /* JEU */
         canvas { position: absolute; top: 0; left: 0; display: none; background: #000; }
         #ui-game { position: absolute; top: 20px; left: 20px; z-index: 50; display: none; pointer-events: none; }
         .fear-bar-container { width: 250px; background: rgba(0,0,0,0.5); padding: 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); }
         .fear-bar { width: 100%; height: 12px; background: #333; border-radius: 6px; overflow: hidden; margin-top: 5px; }
-        #fear-fill { width: 0%; height: 100%; background: #e74c3c; transition: width 0.3s; }
+        #fear-fill { width: 0%; height: 100%; background: #e74c3c; }
         .hidden { display: none !important; }
     </style>
 </head>
@@ -51,15 +46,15 @@
                 <button id="copyBtn" style="background:#95a5a6; padding:5px 10px; font-size:0.8rem;" onclick="copyCode()">COPIER 📋</button>
             </div>
             <div class="teams">
-                <div class="team-box"><h4 style="color:#3498db">CHERCHEURS</h4><button onclick="selectTeam('seeker')" class="btn-blue" style="font-size:0.7rem">REJOINDRE</button><div id="list-seekers"></div></div>
-                <div class="team-box"><h4 style="color:#e74c3c">CACHÉS</h4><button onclick="selectTeam('hider')" class="btn-red" style="font-size:0.7rem">REJOINDRE</button><div id="list-hiders"></div></div>
+                <div class="team-box"><h4>CHERCHEURS</h4><button onclick="selectTeam('seeker')" class="btn-blue" style="font-size:0.7rem">REJOINDRE</button><div id="list-seekers"></div></div>
+                <div class="team-box"><h4>CACHÉS</h4><button onclick="selectTeam('hider')" class="btn-red" style="font-size:0.7rem">REJOINDRE</button><div id="list-hiders"></div></div>
             </div>
-            <button id="startBtn" class="hidden btn-green" onclick="requestStart()" disabled>ATTENTE DES ÉQUIPES...</button>
+            <button id="startBtn" class="hidden btn-green" onclick="requestStart()" disabled>ÉQUIPES INCOMPLÈTES...</button>
         </div>
     </div>
 
     <div id="ui-game">
-        <div id="game-status" style="color:#f1c40f; font-weight:bold; font-size:1.5rem; text-shadow: 2px 2px 4px #000;">LANCEMENT...</div>
+        <div id="game-status" style="color:#f1c40f; font-weight:bold; font-size:1.5rem;">LANCEMENT...</div>
         <div id="fear-ui" class="fear-bar-container hidden">
             <span style="font-size:0.8rem; font-weight:bold;">PEUR IMMOBILE</span>
             <div class="fear-bar"><div id="fear-fill"></div></div>
@@ -69,8 +64,7 @@
 
 <script>
     let myPseudo, myId, isHost = false, players = {}, peer, conn, gameActive = false;
-    let gameState = "PREP"; // PREP ou HUNT
-    let timerVal = 20;
+    let gameState = "PREP", timerVal = 20;
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
     const mapW = 1500, mapH = 1200, keys = {}, statues = [];
@@ -122,6 +116,7 @@
             }
             if(data.type === 'SYNC') { players = data.players; refreshUI(); }
             if(data.type === 'START') startClientGame();
+            if(data.type === 'END') { alert(data.msg); location.reload(); }
             if(data.type === 'POS') { if(players[data.id]) players[data.id] = {...players[data.id], ...data}; }
         });
     }
@@ -145,7 +140,12 @@
             if(p.team === 'seeker') { sDiv.appendChild(div); sCount++; }
             if(p.team === 'hider') { hDiv.appendChild(div); hCount++; }
         }
-        if(isHost) document.getElementById('startBtn').disabled = !(sCount > 0 && hCount > 0);
+        if(isHost) {
+            const btn = document.getElementById('startBtn');
+            const ready = sCount > 0 && hCount > 0;
+            btn.disabled = !ready;
+            btn.innerText = ready ? "LANCER LA PARTIE" : "ÉQUIPES INCOMPLÈTES...";
+        }
     }
 
     function showRoom(code) {
@@ -161,24 +161,20 @@
         document.getElementById('ui-game').style.display = 'block';
         canvas.style.display = 'block';
         canvas.width = window.innerWidth; canvas.height = window.innerHeight;
-        for(let i=0; i<80; i++) statues.push({x: Math.random()*mapW, y: Math.random()*mapH});
-        
-        gameActive = true;
-        gameState = "PREP";
-        timerVal = 20;
+        // Statues sécurisées à l'intérieur des bords
+        for(let i=0; i<80; i++) statues.push({x: 50 + Math.random()*(mapW-100), y: 50 + Math.random()*(mapH-100)});
+        gameActive = true; gameState = "PREP"; timerVal = 20;
 
         const timerInterval = setInterval(() => {
             timerVal--;
             if(timerVal <= 0) {
                 gameState = "HUNT";
-                document.getElementById('game-status').innerText = "LA CHASSE COMMENCE !";
-                setTimeout(() => { document.getElementById('game-status').innerText = ""; }, 3000);
+                document.getElementById('game-status').innerText = "";
                 clearInterval(timerInterval);
             } else {
                 document.getElementById('game-status').innerText = "PRÉPARATION : " + timerVal + "s";
             }
         }, 1000);
-
         gameLoop();
     }
 
@@ -188,10 +184,9 @@
 
     function update() {
         const me = players[myId];
-        if(!me) return;
+        if(!me || !gameActive) return;
 
         let moved = false;
-        // Restrictions de mouvement pour le chercheur en PREP
         if(gameState === "HUNT" || me.team === "hider") {
             if(keys['z'] || keys['w']) { me.y -= 5; moved = true; }
             if(keys['s']) { me.y += 5; moved = true; }
@@ -205,19 +200,28 @@
         if(me.team === 'seeker') {
             const sCX = canvas.width/2, sCY = canvas.height/2;
             me.angle = Math.atan2(mousePos.y - sCY, mousePos.x - sCX);
-            document.getElementById('fear-ui').classList.add('hidden');
+            // DETECTION DE COLLISION (Chercheur capture Caché)
+            if(gameState === "HUNT") {
+                for(let id in players) {
+                    let p = players[id];
+                    if(p.team === 'hider') {
+                        let dist = Math.sqrt((me.x - p.x)**2 + (me.y - p.y)**2);
+                        if(dist < 30) {
+                            broadcast({type: 'END', msg: "LE CHERCHEUR A GAGNÉ ! " + p.pseudo + " a été capturé."});
+                            alert("VICTOIRE ! Vous avez capturé " + p.pseudo);
+                            location.reload();
+                        }
+                    }
+                }
+            }
         } else {
             document.getElementById('fear-ui').classList.remove('hidden');
-            // La peur ne monte que pendant la chasse et si immobile
             if(gameState === "HUNT") {
-                if(!moved) me.fear = Math.min(100, me.fear + 0.3);
+                if(!moved) me.fear = Math.min(100, me.fear + 0.5); // Vitesse augmentée
                 else me.fear = Math.max(0, me.fear - 0.7);
-            } else {
-                me.fear = 0; // Pas de peur en préparation
             }
             document.getElementById('fear-fill').style.width = me.fear + "%";
         }
-
         if(conn && conn.open) conn.send({type: 'POS', id: myId, x: me.x, y: me.y, angle: me.angle, fear: me.fear});
     }
 
@@ -226,45 +230,32 @@
         if(!me) return;
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         const camX = -me.x + canvas.width/2, camY = -me.y + canvas.height/2;
-
         ctx.save();
         ctx.translate(camX, camY);
         ctx.fillStyle = "#111"; ctx.fillRect(0,0, mapW, mapH);
-        
-        // Dessin des statues et joueurs (Logique inchangée)
         ctx.fillStyle = "#7f8c8d";
         statues.forEach(s => ctx.fillRect(s.x, s.y, 25, 25));
-
         for(let id in players) {
             const p = players[id];
             if(p.team === 'hider') {
                 ctx.fillStyle = (p.fear > 85) ? "#e74c3c" : "#7f8c8d";
                 ctx.fillRect(p.x, p.y, 25, 25);
-                if(p.fear >= 100) {
-                    ctx.beginPath(); ctx.arc(p.x+12, p.y+12, (Date.now()%1000)/5, 0, Math.PI*2);
-                    ctx.strokeStyle = "rgba(231, 76, 60, 0.5)"; ctx.stroke();
-                }
             } else if(p.team === 'seeker') {
                 ctx.fillStyle = "#3498db";
                 ctx.fillRect(p.x, p.y, 25, 25);
             }
         }
         ctx.restore();
-
-        // Lampe Torche & Masque de nuit
         if(me.team === 'seeker') {
             ctx.save();
             ctx.fillStyle = "rgba(0,0,0,0.98)";
             ctx.beginPath();
             ctx.rect(0,0, canvas.width, canvas.height);
-            
             if(gameState === "HUNT") {
-                // Trou de la lampe
                 ctx.moveTo(canvas.width/2+12, canvas.height/2+12);
                 ctx.arc(canvas.width/2+12, canvas.height/2+12, 450, me.angle - 0.5, me.angle + 0.5);
             }
             ctx.fill("evenodd");
-            
             if(gameState === "PREP") {
                 ctx.fillStyle = "white"; ctx.textAlign = "center"; ctx.font = "20px Arial";
                 ctx.fillText("LES JOUEURS SE CACHENT...", canvas.width/2, canvas.height/2 + 50);
@@ -272,7 +263,6 @@
             ctx.restore();
         }
     }
-
     function gameLoop() { update(); draw(); if(gameActive) requestAnimationFrame(gameLoop); }
 </script>
 </body>
