@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Statu Hunt - Last Man Standing</title>
+    <title>Statu Hunt - Spectator Mode</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         body { margin: 0; background: #0a0a0a; color: white; font-family: 'Segoe UI', sans-serif; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; }
@@ -189,7 +189,7 @@
 
             if(data.type === 'POS') { if(players[data.id]) players[data.id] = {...players[data.id], ...data}; }
             if(data.type === 'SHOCKWAVE') { waves.push({x: data.x, y: data.y, r: 0, maxR: mapW, owner: data.owner}); }
-            if(data.type === 'FEAR_HIT' && data.targetId === myId) { players[myId].fear = Math.min(100, players[myId].fear + data.amount); }
+            if(data.type === 'FEAR_HIT' && data.targetId === myId && !players[myId].isCaptured) { players[myId].fear = Math.min(100, players[myId].fear + data.amount); }
         });
         if(!isHost && c === hostConn) {
             c.on('open', () => c.send({type: 'JOIN', pseudo: myPseudo}));
@@ -285,13 +285,14 @@
 
     function update() {
         const me = players[myId];
-        if(!me || !gameActive || me.isCaptured) return;
+        if(!me || !gameActive) return;
         const now = Date.now(), dt = (now - lastUpdate) / 16.66;
         lastUpdate = now;
 
         let moved = false;
+        // Autorise le mouvement même si capturé (mode spectateur)
         if(!(me.team === 'seeker' && gameState === "PREP")) {
-            let spd = (me.team === 'seeker' ? 6 : 4.5) * dt;
+            let spd = (me.isCaptured ? 8 : (me.team === 'seeker' ? 6 : 4.5)) * dt;
             if(keys['z'] || keys['w']) { me.y -= spd; moved = true; }
             if(keys['s']) { me.y += spd; moved = true; }
             if(keys['q'] || keys['a']) { me.x -= spd; moved = true; }
@@ -301,53 +302,56 @@
         me.x = Math.max(15, Math.min(mapW - 35, me.x));
         me.y = Math.max(15, Math.min(mapH - 35, me.y));
 
-        for(let i = waves.length - 1; i >= 0; i--) {
-            let w = waves[i]; w.r += 12 * dt;
-            if(w.owner === myId && me.team === 'seeker') {
-                for(let id in players) {
-                    let p = players[id];
-                    if(p.team === 'hider' && !p.isCaptured && !w['hit_'+id]) {
-                        let dist = Math.sqrt((w.x - (p.x+12))**2 + (w.y - (p.y+12))**2);
-                        if(Math.abs(dist - w.r) < 25) {
-                            w['hit_'+id] = true;
-                            broadcast({type: 'FEAR_HIT', targetId: id, amount: 15});
-                            detectionArrows.push({angle: Math.atan2((p.y+12)-(me.y+12), (p.x+12)-(me.x+12)), life: 60});
+        // Un joueur capturé n'envoie pas d'ondes et ne détecte rien
+        if(!me.isCaptured) {
+            for(let i = waves.length - 1; i >= 0; i--) {
+                let w = waves[i]; w.r += 12 * dt;
+                if(w.owner === myId && me.team === 'seeker') {
+                    for(let id in players) {
+                        let p = players[id];
+                        if(p.team === 'hider' && !p.isCaptured && !w['hit_'+id]) {
+                            let dist = Math.sqrt((w.x - (p.x+12))**2 + (w.y - (p.y+12))**2);
+                            if(Math.abs(dist - w.r) < 25) {
+                                w['hit_'+id] = true;
+                                broadcast({type: 'FEAR_HIT', targetId: id, amount: 15});
+                                detectionArrows.push({angle: Math.atan2((p.y+12)-(me.y+12), (p.x+12)-(me.x+12)), life: 60});
+                            }
                         }
                     }
                 }
+                if(w.r > w.maxR) waves.splice(i, 1);
             }
-            if(w.r > w.maxR) waves.splice(i, 1);
-        }
 
-        for(let i = detectionArrows.length - 1; i >= 0; i--) {
-            detectionArrows[i].life -= 1 * dt;
-            if(detectionArrows[i].life <= 0) detectionArrows.splice(i, 1);
-        }
+            for(let i = detectionArrows.length - 1; i >= 0; i--) {
+                detectionArrows[i].life -= 1 * dt;
+                if(detectionArrows[i].life <= 0) detectionArrows.splice(i, 1);
+            }
 
-        if(me.team === 'seeker') {
-            me.angle = Math.atan2(mousePos.y - canvas.height/2, mousePos.x - canvas.width/2);
-            if(gameState === "HUNT") {
-                for(let id in players) {
-                    if(id === myId) continue;
-                    let p = players[id];
-                    if(p.team === 'hider' && !p.isCaptured) {
-                        let dist = Math.sqrt((me.x - p.x)**2 + (me.y - p.y)**2);
-                        if(dist < 40) {
-                            let captMsg = {type: 'CAPTURE', targetId: id};
-                            if(isHost) { 
-                                players[id].isCaptured = true; 
-                                broadcast({type: 'SYNC', players: players});
-                                checkWinCondition();
-                            } else if(hostConn && hostConn.open) { hostConn.send(captMsg); }
+            if(me.team === 'seeker') {
+                me.angle = Math.atan2(mousePos.y - canvas.height/2, mousePos.x - canvas.width/2);
+                if(gameState === "HUNT") {
+                    for(let id in players) {
+                        if(id === myId) continue;
+                        let p = players[id];
+                        if(p.team === 'hider' && !p.isCaptured) {
+                            let dist = Math.sqrt((me.x - p.x)**2 + (me.y - p.y)**2);
+                            if(dist < 40) {
+                                let captMsg = {type: 'CAPTURE', targetId: id};
+                                if(isHost) { 
+                                    players[id].isCaptured = true; 
+                                    broadcast({type: 'SYNC', players: players});
+                                    checkWinCondition();
+                                } else if(hostConn && hostConn.open) { hostConn.send(captMsg); }
+                            }
                         }
                     }
                 }
+            } else if(gameState === "HUNT") {
+                if(!moved) me.fear = Math.min(100, me.fear + 0.4 * dt); else me.fear = Math.max(0, me.fear - 1.2 * dt);
             }
-        } else if(gameState === "HUNT") {
-            if(!moved) me.fear = Math.min(100, me.fear + 0.4 * dt); else me.fear = Math.max(0, me.fear - 1.2 * dt);
         }
         
-        let syncData = {type: 'POS', id: myId, x: me.x, y: me.y, angle: me.angle, fear: me.fear, isMoving: me.isMoving};
+        let syncData = {type: 'POS', id: myId, x: me.x, y: me.y, angle: me.angle, fear: me.fear, isMoving: me.isMoving, isCaptured: me.isCaptured};
         if(isHost) broadcast(syncData);
         else if(hostConn && hostConn.open) hostConn.send(syncData);
     }
@@ -361,24 +365,28 @@
         ctx.save(); ctx.translate(camX, camY);
         ctx.strokeStyle = "#f1c40f"; ctx.lineWidth = 10; ctx.strokeRect(0,0, mapW, mapH);
         ctx.fillStyle = "#111"; ctx.fillRect(0,0, mapW, mapH);
-        statues.forEach(s => drawStatue(s.x, s.y, "#555", false, false, false));
+        statues.forEach(s => drawStatue(s.x, s.y, "#555", false, false, false, false));
         waves.forEach(w => {
             ctx.beginPath(); ctx.arc(w.x, w.y, w.r, 0, Math.PI * 2);
             ctx.strokeStyle = `rgba(52, 152, 219, ${1 - w.r/w.maxR})`; ctx.lineWidth = 4; ctx.stroke();
         });
         for(let id in players) {
             let p = players[id];
-            if(p.isCaptured) continue; // On ne dessine pas les capturés
+            let isMe = (id === myId);
+            // On ne dessine les morts que s'ils sont nous-mêmes (mode fantôme blanc)
+            if(p.isCaptured) {
+                if(isMe) drawStatue(p.x, p.y, "rgba(255,255,255,0.6)", false, true, false, true);
+                continue;
+            }
             if(p.team === 'hider') {
-                let isMe = (id === myId);
                 let baseColor = p.isMoving ? "#333" : "#555"; 
                 let color = (isMe || me.team !== 'seeker') && p.fear > 80 ? "#962d22" : baseColor;
-                drawStatue(p.x, p.y, color, p.fear >= 100, isMe, p.isMoving);
+                drawStatue(p.x, p.y, color, p.fear >= 100, isMe, p.isMoving, false);
             } else { drawSeeker(p); }
         }
         ctx.restore();
         drawLighting(me);
-        if(me.team === 'seeker') {
+        if(me.team === 'seeker' && !me.isCaptured) {
             detectionArrows.forEach(arr => {
                 ctx.save(); ctx.translate(canvas.width/2 + 12, canvas.height/2 + 12); ctx.rotate(arr.angle);
                 ctx.fillStyle = `rgba(241, 196, 15, ${arr.life / 60})`; ctx.beginPath();
@@ -394,10 +402,19 @@
         requestAnimationFrame(draw);
     }
 
-    function drawStatue(x, y, color, pulse, isSelf, moving) {
-        ctx.fillStyle = "rgba(0,0,0,0.4)"; ctx.beginPath(); ctx.ellipse(x+12, y+28, 15, 6, 0, 0, Math.PI*2); ctx.fill();
+    function drawStatue(x, y, color, pulse, isSelf, moving, isGhost) {
+        ctx.save();
+        if(isGhost) {
+            // Petites ailes pour le fantôme
+            ctx.fillStyle = "rgba(255,255,255,0.4)";
+            ctx.beginPath(); ctx.ellipse(x-5, y+10, 10, 5, -0.5, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.ellipse(x+30, y+10, 10, 5, 0.5, 0, Math.PI*2); ctx.fill();
+        } else {
+            ctx.fillStyle = "rgba(0,0,0,0.4)"; ctx.beginPath(); ctx.ellipse(x+12, y+28, 15, 6, 0, 0, Math.PI*2); ctx.fill();
+        }
         ctx.fillStyle = color; ctx.fillRect(x, y, 25, 25);
-        if(isSelf) { ctx.fillStyle = "#f1c40f"; ctx.fillRect(x+10, y-5, 5, 5); }
+        if(isSelf && !isGhost) { ctx.fillStyle = "#f1c40f"; ctx.fillRect(x+10, y-5, 5, 5); }
+        ctx.restore();
     }
 
     function drawSeeker(p) { ctx.fillStyle = "#3498db"; ctx.fillRect(p.x, p.y, 25, 25); ctx.strokeStyle = "white"; ctx.strokeRect(p.x, p.y, 25, 25); }
@@ -405,7 +422,11 @@
     function drawLighting(me) {
         ctx.save();
         const camX = -me.x + canvas.width/2, camY = -me.y + canvas.height/2;
-        if(me.team === 'seeker') {
+        // Un fantôme voit tout (pas de brouillard de guerre sombre)
+        if(me.isCaptured) {
+            ctx.fillStyle = "rgba(255,255,255,0.05)";
+            ctx.fillRect(0,0, canvas.width, canvas.height);
+        } else if(me.team === 'seeker') {
             ctx.fillStyle = "black"; ctx.beginPath(); ctx.rect(0,0, canvas.width, canvas.height);
             if(gameState === "HUNT") { ctx.moveTo(canvas.width/2+12, canvas.height/2+12); ctx.arc(canvas.width/2+12, canvas.height/2+12, 550, me.angle-0.55, me.angle+0.55); ctx.fill("evenodd"); }
             else { ctx.fill(); }
@@ -465,7 +486,8 @@
     window.addEventListener('mousemove', e => { mousePos.x = e.clientX; mousePos.y = e.clientY; });
     window.addEventListener('mousedown', e => {
         const me = players[myId];
-        if(gameActive && gameState === "HUNT" && me.team === 'seeker' && e.button === 0) {
+        // Un mort ne peut plus envoyer de Shockwave
+        if(gameActive && !me.isCaptured && gameState === "HUNT" && me.team === 'seeker' && e.button === 0) {
             if(Date.now() - lastShockwave > 4000) {
                 lastShockwave = Date.now();
                 let waveData = {type: 'SHOCKWAVE', x: me.x + 12, y: me.y + 12, owner: myId};
