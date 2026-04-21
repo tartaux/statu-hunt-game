@@ -86,7 +86,7 @@
     <canvas id="gameCanvas"></canvas>
 
 <script>
-    let myPseudo, myId, isHost = false, players = {}, peer, connections = [], gameActive = false, roomCode = "";
+    let myPseudo, myId, isHost = false, players = {}, peer, connections = [], hostConn = null, gameActive = false, roomCode = "";
     let gameState = "PREP", prepTimer = 10, gameDuration = 120;
     let lastUpdate = Date.now(), logicInterval, masterTimer;
     let mapSizeKey = 'S', mapW = 2000, mapH = 2000;
@@ -134,7 +134,7 @@
     function joinRoom() {
         roomCode = document.getElementById('joinInput').value.toUpperCase().trim();
         setupPeer();
-        setTimeout(() => { let conn = peer.connect('SH-' + roomCode); initConn(conn); }, 800);
+        setTimeout(() => { hostConn = peer.connect('SH-' + roomCode); initConn(hostConn); }, 800);
         showRoom(roomCode);
         document.getElementById('size-selector').style.pointerEvents = 'none';
         document.getElementById('size-selector').style.opacity = '0.7';
@@ -164,7 +164,11 @@
                 players[c.peer] = {pseudo: data.pseudo, team: null, x: 1000, y: 1000, angle: 0, fear: 0, isMoving: false}; 
                 if(isHost) broadcast({type:'SYNC', players: players}); 
             }
-            if(data.type === 'SYNC') { players = data.players; refreshUI(); }
+            if(data.type === 'SYNC') { 
+                players = data.players; 
+                if(isHost) broadcast({type:'SYNC', players: players}); // L'hôte répercute le changement
+                refreshUI(); 
+            }
             if(data.type === 'SYNC_TIMER') { gameDuration = data.duration; updateTimerDisplay(); }
             if(data.type === 'SYNC_SIZE') { 
                 mapSizeKey = data.size; mapW = data.w; mapH = data.h;
@@ -182,6 +186,9 @@
             if(data.type === 'SHOCKWAVE') { waves.push({x: data.x, y: data.y, r: 0, maxR: mapW, owner: data.owner}); }
             if(data.type === 'FEAR_HIT' && data.targetId === myId) { players[myId].fear = Math.min(100, players[myId].fear + data.amount); }
         });
+        if(!isHost && c === hostConn) {
+            c.on('open', () => c.send({type: 'JOIN', pseudo: myPseudo}));
+        }
     }
 
     function broadcast(data) {
@@ -192,7 +199,7 @@
         players[myId].team = t;
         refreshUI();
         if(isHost) broadcast({type: 'SYNC', players: players});
-        else if(connections[0]) connections[0].send({type: 'SYNC', players: players});
+        else if(hostConn && hostConn.open) hostConn.send({type: 'SYNC', players: players});
     }
 
     function refreshUI() {
@@ -310,7 +317,7 @@
                         if(dist < 40) {
                             let killMsg = {type: 'KILL', reason: `${p.pseudo} a été brisé !`};
                             if(isHost) { broadcast({type: 'END', winner: 'seekers', reason: killMsg.reason}); showEndScreen('seekers', killMsg.reason); }
-                            else { if(connections[0]) connections[0].send(killMsg); }
+                            else if(hostConn && hostConn.open) { hostConn.send(killMsg); }
                         }
                     }
                 }
@@ -319,7 +326,7 @@
             if(!moved) me.fear = Math.min(100, me.fear + 0.4 * dt); else me.fear = Math.max(0, me.fear - 1.2 * dt);
         }
         if(isHost) broadcast({type: 'POS', id: myId, x: me.x, y: me.y, angle: me.angle, fear: me.fear, isMoving: me.isMoving});
-        else if(connections[0]) connections[0].send({type: 'POS', id: myId, x: me.x, y: me.y, angle: me.angle, fear: me.fear, isMoving: me.isMoving});
+        else if(hostConn && hostConn.open) hostConn.send({type: 'POS', id: myId, x: me.x, y: me.y, angle: me.angle, fear: me.fear, isMoving: me.isMoving});
     }
 
     function draw() {
@@ -436,7 +443,7 @@
                 lastShockwave = Date.now();
                 let waveData = {type: 'SHOCKWAVE', x: me.x + 12, y: me.y + 12, owner: myId};
                 waves.push({x: waveData.x, y: waveData.y, r: 0, maxR: mapW, owner: myId});
-                if(isHost) broadcast(waveData); else connections[0].send(waveData);
+                if(isHost) broadcast(waveData); else if(hostConn && hostConn.open) hostConn.send(waveData);
             }
         }
     });
