@@ -2,21 +2,23 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Statu Hunt - Final V3</title>
+    <title>Statu Hunt - Pro Edition</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         body { margin: 0; background: #1a1a1a; color: white; font-family: 'Segoe UI', sans-serif; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; }
         #lobby { background: #2c3e50; padding: 30px; border-radius: 15px; text-align: center; width: 550px; box-shadow: 0 0 30px rgba(0,0,0,0.5); z-index: 100; }
         input { padding: 12px; border-radius: 8px; border: none; width: 80%; text-align: center; font-size: 1rem; background: #1a1a1a; color: white; margin-bottom: 10px; }
-        button { padding: 12px 24px; border-radius: 8px; border: none; cursor: pointer; font-weight: bold; transition: 0.2s; margin: 5px; }
+        button { padding: 10px 20px; border-radius: 8px; border: none; cursor: pointer; font-weight: bold; transition: 0.2s; margin: 5px; }
         .btn-blue { background: #3498db; color: white; }
         .btn-red { background: #e74c3c; color: white; }
-        .btn-green { background: #27ae60; color: white; width: 100%; margin-top: 15px; }
+        .btn-green { background: #27ae60; color: white; width: 100%; margin-top: 15px; font-size: 1.1rem; }
         button:disabled { background: #7f8c8d; cursor: not-allowed; opacity: 0.5; }
-        .code-display { background: rgba(0,0,0,0.3); padding: 15px; border-radius: 10px; margin-bottom: 20px; display: flex; justify-content: center; align-items: center; gap: 15px; }
+        
+        .config-box { background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px; margin: 15px 0; }
         .teams { display: flex; gap: 15px; margin-top: 20px; }
         .team-box { flex: 1; background: #34495e; padding: 10px; border-radius: 10px; min-height: 150px; }
         .player-tag { background: rgba(0,0,0,0.2); padding: 8px; margin: 5px 0; border-radius: 6px; font-size: 0.9rem; border-left: 4px solid #f1c40f; text-align: left; }
+        
         canvas { position: absolute; top: 0; left: 0; display: none; background: #000; }
         #ui-game { position: absolute; top: 20px; left: 20px; z-index: 50; display: none; pointer-events: none; }
         .fear-bar-container { width: 250px; background: rgba(0,0,0,0.5); padding: 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); }
@@ -33,17 +35,27 @@
             <input type="text" id="pseudoInput" placeholder="Ton pseudo..." onkeydown="if(event.key==='Enter') confirmPseudo()">
             <br><button class="btn-blue" onclick="confirmPseudo()">CONTINUER</button>
         </div>
+
         <div id="step-menu" class="hidden">
             <button class="btn-blue" onclick="createRoom()">CRÉER UNE SALLE</button>
             <p>— OU —</p>
             <input type="text" id="joinInput" placeholder="CODE DE PARTIE">
             <br><button class="btn-blue" onclick="joinRoom()">REJOINDRE</button>
         </div>
+
         <div id="step-room" class="hidden">
-            <div class="code-display">
-                CODE : <span id="displayCode" style="color:#f1c40f; font-weight:bold; font-size:1.5rem;">---</span>
-                <button id="copyBtn" style="background:#95a5a6; padding:5px 10px; font-size:0.8rem;" onclick="copyCode()">COPIER 📋</button>
+            <div style="background: rgba(0,0,0,0.3); padding: 10px; border-radius: 8px;">
+                CODE : <span id="displayCode" style="color:#f1c40f; font-weight:bold;">---</span>
+                <button style="background:#95a5a6; font-size:0.7rem;" onclick="copyCode()">COPIER 📋</button>
             </div>
+
+            <div class="config-box">
+                <span style="font-size: 0.9rem;">DURÉE DE LA CHASSE</span><br>
+                <button id="btnLess" class="btn-blue" onclick="changeTimer(-30)" style="padding:5px 15px;">-</button>
+                <span id="timerSetting" style="font-weight:bold; font-size:1.2rem; margin:0 10px;">2:00</span>
+                <button id="btnMore" class="btn-blue" onclick="changeTimer(30)" style="padding:5px 15px;">+</button>
+            </div>
+
             <div class="teams">
                 <div class="team-box"><h4>CHERCHEURS</h4><button onclick="selectTeam('seeker')" class="btn-blue" style="font-size:0.7rem">REJOINDRE</button><div id="list-seekers"></div></div>
                 <div class="team-box"><h4>CACHÉS</h4><button onclick="selectTeam('hider')" class="btn-red" style="font-size:0.7rem">REJOINDRE</button><div id="list-hiders"></div></div>
@@ -53,7 +65,7 @@
     </div>
 
     <div id="ui-game">
-        <div id="game-status" style="color:#f1c40f; font-weight:bold; font-size:1.5rem;">LANCEMENT...</div>
+        <div id="game-status" style="color:#f1c40f; font-weight:bold; font-size:1.5rem; text-shadow: 2px 2px #000;">LANCEMENT...</div>
         <div id="fear-ui" class="fear-bar-container hidden">
             <span style="font-size:0.8rem; font-weight:bold;">PEUR IMMOBILE</span>
             <div class="fear-bar"><div id="fear-fill"></div></div>
@@ -63,12 +75,13 @@
 
 <script>
     let myPseudo, myId, isHost = false, players = {}, peer, conn, gameActive = false, roomCode = "";
-    let gameState = "PREP", timerVal = 10;
+    let gameState = "PREP", prepTimer = 10, gameDuration = 120; // 120s par défaut
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
     const mapW = 1500, mapH = 1200, keys = {}, statues = [];
     let mousePos = { x: 0, y: 0 };
 
+    // --- LOBBY ---
     function confirmPseudo() {
         myPseudo = document.getElementById('pseudoInput').value.trim();
         if(myPseudo.length < 2) return alert("Pseudo trop court !");
@@ -76,13 +89,24 @@
         document.getElementById('step-menu').classList.remove('hidden');
     }
 
-    function copyCode() {
-        navigator.clipboard.writeText(document.getElementById('displayCode').innerText).then(() => {
-            document.getElementById('copyBtn').innerText = "COPIÉ ! ✅";
-            setTimeout(() => document.getElementById('copyBtn').innerText = "COPIER 📋", 2000);
-        });
+    function changeTimer(val) {
+        if(!isHost) return;
+        gameDuration = Math.max(60, Math.min(300, gameDuration + val));
+        updateTimerDisplay();
+        broadcast({type: 'SYNC_TIMER', duration: gameDuration});
     }
 
+    function updateTimerDisplay() {
+        let m = Math.floor(gameDuration/60), s = gameDuration%60;
+        document.getElementById('timerSetting').innerText = `${m}:${s === 0 ? '00' : s}`;
+    }
+
+    function copyCode() {
+        navigator.clipboard.writeText(document.getElementById('displayCode').innerText);
+        alert("Code copié !");
+    }
+
+    // --- RESEAU ---
     function createRoom() {
         roomCode = Math.random().toString(36).substring(2, 7).toUpperCase();
         isHost = true; setupPeer('SH-' + roomCode); showRoom(roomCode);
@@ -95,6 +119,8 @@
         setupPeer();
         setTimeout(() => { conn = peer.connect('SH-' + roomCode); initConn(conn); }, 800);
         showRoom(roomCode);
+        document.getElementById('btnLess').classList.add('hidden');
+        document.getElementById('btnMore').classList.add('hidden');
     }
 
     function setupPeer(id = null) {
@@ -102,7 +128,10 @@
         peer.on('open', (id) => myId = id);
         peer.on('connection', (c) => {
             conn = c; initConn(c);
-            if(isHost) setTimeout(() => c.send({type:'SYNC', players: players}), 1000);
+            if(isHost) setTimeout(() => {
+                c.send({type:'SYNC', players: players});
+                c.send({type:'SYNC_TIMER', duration: gameDuration});
+            }, 1000);
         });
     }
 
@@ -114,6 +143,7 @@
                 if(isHost) broadcast({type:'SYNC', players: players});
             }
             if(data.type === 'SYNC') { players = data.players; refreshUI(); }
+            if(data.type === 'SYNC_TIMER') { gameDuration = data.duration; updateTimerDisplay(); }
             if(data.type === 'START') startClientGame();
             if(data.type === 'END') { alert(data.msg); location.reload(); }
             if(data.type === 'POS') { if(players[data.id]) players[data.id] = {...players[data.id], ...data}; }
@@ -155,35 +185,7 @@
 
     function requestStart() { if(isHost) { broadcast({type: 'START'}); startClientGame(); } }
 
-    // --- GENERATEUR DE MAP SYNCHRONISE ---
-    function generateMap(seedString) {
-        // Simple hash pour utiliser le code de salle comme graine (seed)
-        let seed = 0;
-        for (let i = 0; i < seedString.length; i++) seed += seedString.charCodeAt(i);
-        
-        const pseudoRandom = () => {
-            seed = (seed * 9301 + 49297) % 233280;
-            return seed / 233280;
-        };
-
-        for(let i=0; i<85; i++) {
-            let x, y, tooClose;
-            let attempts = 0;
-            do {
-                tooClose = false;
-                x = 60 + pseudoRandom() * (mapW - 120);
-                y = 60 + pseudoRandom() * (mapH - 120);
-                // Verifier distance avec autres statues
-                for(let s of statues) {
-                    let d = Math.sqrt((x-s.x)**2 + (y-s.y)**2);
-                    if(d < 45) tooClose = true;
-                }
-                attempts++;
-            } while(tooClose && attempts < 50);
-            statues.push({x, y});
-        }
-    }
-
+    // --- GAME LOGIC (FIX ONGLET INACTIF) ---
     function startClientGame() {
         document.getElementById('lobby').style.display = 'none';
         document.getElementById('ui-game').style.display = 'block';
@@ -191,19 +193,48 @@
         canvas.width = window.innerWidth; canvas.height = window.innerHeight;
         
         generateMap(roomCode);
+        gameActive = true; gameState = "PREP"; prepTimer = 10;
+
+        // Boucle Logique (60 FPS) - Indépendante de requestAnimationFrame
+        setInterval(update, 1000/60);
         
-        gameActive = true; gameState = "PREP"; timerVal = 10;
-        const timerInterval = setInterval(() => {
-            timerVal--;
-            if(timerVal <= 0) {
-                gameState = "HUNT";
-                document.getElementById('game-status').innerText = "";
-                clearInterval(timerInterval);
+        // Timer de jeu
+        const masterTimer = setInterval(() => {
+            if(gameState === "PREP") {
+                prepTimer--;
+                document.getElementById('game-status').innerText = "PRÉPARATION : " + prepTimer + "s";
+                if(prepTimer <= 0) { gameState = "HUNT"; }
             } else {
-                document.getElementById('game-status').innerText = "PRÉPARATION : " + timerVal + "s";
+                gameDuration--;
+                let m = Math.floor(gameDuration/60), s = gameDuration%60;
+                document.getElementById('game-status').innerText = `TEMPS RESTANT : ${m}:${s<10?'0'+s:s}`;
+                
+                if(gameDuration <= 0) {
+                    clearInterval(masterTimer);
+                    alert("TEMPS ÉCOULÉ ! LES CACHÉS ONT GAGNÉ !");
+                    location.reload();
+                }
             }
         }, 1000);
-        gameLoop();
+
+        requestAnimationFrame(draw);
+    }
+
+    function generateMap(seedString) {
+        let seed = 0;
+        for (let i = 0; i < seedString.length; i++) seed += seedString.charCodeAt(i);
+        const pseudoRandom = () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; };
+        for(let i=0; i<85; i++) {
+            let x, y, tooClose, attempts = 0;
+            do {
+                tooClose = false;
+                x = 60 + pseudoRandom() * (mapW - 120);
+                y = 60 + pseudoRandom() * (mapH - 120);
+                for(let s of statues) { if(Math.sqrt((x-s.x)**2 + (y-s.y)**2) < 45) tooClose = true; }
+                attempts++;
+            } while(tooClose && attempts < 50);
+            statues.push({x, y});
+        }
     }
 
     window.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
@@ -232,22 +263,18 @@
                 for(let id in players) {
                     let p = players[id];
                     if(p.team === 'hider') {
-                        let dist = Math.sqrt((me.x - p.x)**2 + (me.y - p.y)**2);
-                        if(dist < 30) {
-                            broadcast({type: 'END', msg: "LE CHERCHEUR A GAGNÉ ! " + p.pseudo + " a été capturé."});
-                            alert("VICTOIRE ! Vous avez capturé " + p.pseudo);
-                            location.reload();
+                        if(Math.sqrt((me.x - p.x)**2 + (me.y - p.y)**2) < 30) {
+                            broadcast({type: 'END', msg: "VICTOIRE DU CHERCHEUR ! " + p.pseudo + " a été capturé."});
+                            alert("VICTOIRE !"); location.reload();
                         }
                     }
                 }
             }
         } else {
-            document.getElementById('fear-ui').classList.remove('hidden');
             if(gameState === "HUNT") {
                 if(!moved) me.fear = Math.min(100, me.fear + 0.5);
                 else me.fear = Math.max(0, me.fear - 0.7);
             }
-            document.getElementById('fear-fill').style.width = me.fear + "%";
         }
         if(conn && conn.open) conn.send({type: 'POS', id: myId, x: me.x, y: me.y, angle: me.angle, fear: me.fear});
     }
@@ -260,51 +287,38 @@
         ctx.save();
         ctx.translate(camX, camY);
         ctx.fillStyle = "#111"; ctx.fillRect(0,0, mapW, mapH);
-        
-        // Statues
         ctx.fillStyle = "#7f8c8d";
         statues.forEach(s => ctx.fillRect(s.x, s.y, 25, 25));
-
-        // Joueurs
         for(let id in players) {
             const p = players[id];
             if(p.team === 'hider') {
                 ctx.fillStyle = (p.fear > 85) ? "#e74c3c" : "#7f8c8d";
                 ctx.fillRect(p.x, p.y, 25, 25);
-                // ONCE DE PEUR (Sonar)
                 if(p.fear >= 100) {
-                    ctx.beginPath();
-                    ctx.arc(p.x + 12.5, p.y + 12.5, (Date.now() % 1000) / 4, 0, Math.PI * 2);
-                    ctx.strokeStyle = "rgba(231, 76, 60, 0.6)";
-                    ctx.lineWidth = 2;
-                    ctx.stroke();
+                    ctx.beginPath(); ctx.arc(p.x+12.5, p.y+12.5, (Date.now()%1000)/4, 0, Math.PI*2);
+                    ctx.strokeStyle = "rgba(231, 76, 60, 0.6)"; ctx.stroke();
                 }
             } else if(p.team === 'seeker') {
-                ctx.fillStyle = "#3498db";
-                ctx.fillRect(p.x, p.y, 25, 25);
+                ctx.fillStyle = "#3498db"; ctx.fillRect(p.x, p.y, 25, 25);
             }
         }
         ctx.restore();
 
-        // Masque de nuit & Lampe
         if(me.team === 'seeker') {
             ctx.save();
             ctx.fillStyle = "rgba(0,0,0,0.98)";
-            ctx.beginPath();
-            ctx.rect(0,0, canvas.width, canvas.height);
+            ctx.beginPath(); ctx.rect(0,0, canvas.width, canvas.height);
             if(gameState === "HUNT") {
                 ctx.moveTo(canvas.width/2+12, canvas.height/2+12);
-                ctx.arc(canvas.width/2+12, canvas.height/2+12, 450, me.angle - 0.5, me.angle + 0.5);
+                ctx.arc(canvas.width/2+12, canvas.height/2+12, 450, me.angle-0.5, me.angle+0.5);
             }
-            ctx.fill("evenodd");
-            if(gameState === "PREP") {
-                ctx.fillStyle = "white"; ctx.textAlign = "center"; ctx.font = "20px Arial";
-                ctx.fillText("LES JOUEURS SE CACHENT...", canvas.width/2, canvas.height/2 + 50);
-            }
-            ctx.restore();
+            ctx.fill("evenodd"); ctx.restore();
+        } else {
+            document.getElementById('fear-ui').classList.remove('hidden');
+            document.getElementById('fear-fill').style.width = me.fear + "%";
         }
+        requestAnimationFrame(draw);
     }
-    function gameLoop() { update(); draw(); if(gameActive) requestAnimationFrame(gameLoop); }
 </script>
 </body>
 </html>
