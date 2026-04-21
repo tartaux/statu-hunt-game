@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Statu Hunt - Reset Fix</title>
+    <title>Statu Hunt - Improved Lobby</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         body { margin: 0; background: #0a0a0a; color: white; font-family: 'Segoe UI', sans-serif; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; }
@@ -13,6 +13,7 @@
         .btn-blue { background: #3498db; color: white; box-shadow: 0 4px #2980b9; }
         .btn-red { background: #e74c3c; color: white; box-shadow: 0 4px #c0392b; }
         .btn-green { background: #27ae60; color: white; width: 100%; margin-top: 15px; font-size: 1.1rem; box-shadow: 0 4px #1e8449; }
+        button:disabled { background: #7f8c8d !important; box-shadow: 0 4px #95a5a6 !important; cursor: not-allowed; opacity: 0.6; }
         .config-box { background: rgba(0,0,0,0.3); padding: 15px; border-radius: 8px; margin: 10px 0; }
         .teams { display: flex; gap: 15px; margin-top: 20px; }
         .team-box { flex: 1; background: #1a252f; padding: 10px; border-radius: 10px; min-height: 150px; border: 1px solid #34495e; }
@@ -29,6 +30,7 @@
     </style>
 </head>
 <body>
+
     <div id="lobby">
         <h1 style="color: #f1c40f; letter-spacing: 3px;">STATU HUNT</h1>
         <div id="step-pseudo">
@@ -64,7 +66,7 @@
                 <div class="team-box"><h4>CHERCHEURS</h4><button onclick="selectTeam('seeker')" class="btn-blue" style="font-size: 0.7rem;">REJOINDRE</button><div id="list-seekers"></div></div>
                 <div class="team-box"><h4>CACHÉS</h4><button onclick="selectTeam('hider')" class="btn-red" style="font-size: 0.7rem;">REJOINDRE</button><div id="list-hiders"></div></div>
             </div>
-            <button id="startBtn" class="hidden btn-green" onclick="requestStart()" disabled>LANCER LA PARTIE</button>
+            <button id="startBtn" class="hidden btn-green" onclick="requestStart()" disabled>EN ATTENTE DES JOUEURS</button>
         </div>
     </div>
 
@@ -195,7 +197,13 @@
             if(p.team === 'seeker') { sCount++; sDiv.innerHTML += tag; }
             if(p.team === 'hider') { hCount++; hDiv.innerHTML += tag; }
         }
-        if(isHost) document.getElementById('startBtn').disabled = !(sCount > 0 && hCount > 0);
+        
+        if(isHost) {
+            const btn = document.getElementById('startBtn');
+            const canStart = (sCount > 0 && hCount > 0);
+            btn.disabled = !canStart;
+            btn.innerText = canStart ? "LANCER LA PARTIE" : "EN ATTENTE DES JOUEURS";
+        }
     }
 
     function changeTimer(v) { if(isHost) { gameDuration = Math.max(60, gameDuration + v); updateTimerDisplay(); broadcast({type: 'SYNC_TIMER', duration: gameDuration}); } }
@@ -224,7 +232,6 @@
         
         statues.length = 0; generateMap(roomCode);
         
-        // Reset game duration based on lobby setting
         let timeParts = document.getElementById('timerSetting').innerText.split(':');
         gameDuration = parseInt(timeParts[0]) * 60 + parseInt(timeParts[1]);
 
@@ -400,7 +407,6 @@
         document.getElementById('end-screen').style.display = 'none'; 
         document.getElementById('lobby').style.display = 'block'; 
         
-        // Reset fear for all players
         for(let id in players) {
             players[id].fear = 0;
         }
