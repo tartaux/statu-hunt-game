@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Statu Hunt - Multiplayer Fix</title>
+    <title>Statu Hunt - Last Man Standing</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         body { margin: 0; background: #0a0a0a; color: white; font-family: 'Segoe UI', sans-serif; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; }
@@ -144,7 +144,7 @@
         peer = new Peer(id);
         peer.on('open', (i) => {
             myId = i;
-            players[myId] = {pseudo: myPseudo, team: null, x: 1000, y: 1000, angle: 0, fear: 0, isMoving: false};
+            players[myId] = {pseudo: myPseudo, team: null, x: 1000, y: 1000, angle: 0, fear: 0, isMoving: false, isCaptured: false};
             refreshUI();
         });
         peer.on('connection', (c) => {
@@ -161,12 +161,12 @@
     function initConn(c) {
         c.on('data', (data) => {
             if(data.type === 'JOIN') { 
-                players[c.peer] = {pseudo: data.pseudo, team: null, x: 1000, y: 1000, angle: 0, fear: 0, isMoving: false}; 
+                players[c.peer] = {pseudo: data.pseudo, team: null, x: 1000, y: 1000, angle: 0, fear: 0, isMoving: false, isCaptured: false}; 
                 if(isHost) broadcast({type:'SYNC', players: players}); 
             }
             if(data.type === 'SYNC') { 
                 players = data.players; 
-                if(isHost) broadcast({type:'SYNC', players: players}); // L'hôte répercute le changement
+                if(isHost) broadcast({type:'SYNC', players: players});
                 refreshUI(); 
             }
             if(data.type === 'SYNC_TIMER') { gameDuration = data.duration; updateTimerDisplay(); }
@@ -178,16 +178,32 @@
             if(data.type === 'START') { players = data.players; startClientGame(); }
             if(data.type === 'END') showEndScreen(data.winner, data.reason);
             if(data.type === 'BACK_LOBBY') resetToLobby();
-            if(data.type === 'KILL' && isHost && gameActive) {
-                broadcast({type: 'END', winner: 'seekers', reason: data.reason});
-                showEndScreen('seekers', data.reason);
+            
+            if(data.type === 'CAPTURE') {
+                if(players[data.targetId]) players[data.targetId].isCaptured = true;
+                if(isHost) {
+                    broadcast({type: 'SYNC', players: players});
+                    checkWinCondition();
+                }
             }
+
             if(data.type === 'POS') { if(players[data.id]) players[data.id] = {...players[data.id], ...data}; }
             if(data.type === 'SHOCKWAVE') { waves.push({x: data.x, y: data.y, r: 0, maxR: mapW, owner: data.owner}); }
             if(data.type === 'FEAR_HIT' && data.targetId === myId) { players[myId].fear = Math.min(100, players[myId].fear + data.amount); }
         });
         if(!isHost && c === hostConn) {
             c.on('open', () => c.send({type: 'JOIN', pseudo: myPseudo}));
+        }
+    }
+
+    function checkWinCondition() {
+        let activeHiders = 0;
+        for(let id in players) {
+            if(players[id].team === 'hider' && !players[id].isCaptured) activeHiders++;
+        }
+        if(activeHiders === 0 && gameActive) {
+            broadcast({type: 'END', winner: 'seekers', reason: "Tous les intrus ont été brisés !"});
+            showEndScreen('seekers', "Tous les intrus ont été brisés !");
         }
     }
 
@@ -232,6 +248,8 @@
         do { hX = margin + Math.random() * (mapW - margin*2); hY = margin + Math.random() * (mapH - margin*2); } 
         while (Math.sqrt((sX-hX)**2 + (sY-hY)**2) < mapW/2);
         for(let id in players) { 
+            players[id].isCaptured = false;
+            players[id].fear = 0;
             if(players[id].team === 'seeker') { players[id].x = sX; players[id].y = sY; } 
             else { players[id].x = hX; players[id].y = hY; } 
         }
@@ -267,7 +285,7 @@
 
     function update() {
         const me = players[myId];
-        if(!me || !gameActive) return;
+        if(!me || !gameActive || me.isCaptured) return;
         const now = Date.now(), dt = (now - lastUpdate) / 16.66;
         lastUpdate = now;
 
@@ -288,7 +306,7 @@
             if(w.owner === myId && me.team === 'seeker') {
                 for(let id in players) {
                     let p = players[id];
-                    if(p.team === 'hider' && !w['hit_'+id]) {
+                    if(p.team === 'hider' && !p.isCaptured && !w['hit_'+id]) {
                         let dist = Math.sqrt((w.x - (p.x+12))**2 + (w.y - (p.y+12))**2);
                         if(Math.abs(dist - w.r) < 25) {
                             w['hit_'+id] = true;
@@ -312,12 +330,15 @@
                 for(let id in players) {
                     if(id === myId) continue;
                     let p = players[id];
-                    if(p.team === 'hider') {
+                    if(p.team === 'hider' && !p.isCaptured) {
                         let dist = Math.sqrt((me.x - p.x)**2 + (me.y - p.y)**2);
                         if(dist < 40) {
-                            let killMsg = {type: 'KILL', reason: `${p.pseudo} a été brisé !`};
-                            if(isHost) { broadcast({type: 'END', winner: 'seekers', reason: killMsg.reason}); showEndScreen('seekers', killMsg.reason); }
-                            else if(hostConn && hostConn.open) { hostConn.send(killMsg); }
+                            let captMsg = {type: 'CAPTURE', targetId: id};
+                            if(isHost) { 
+                                players[id].isCaptured = true; 
+                                broadcast({type: 'SYNC', players: players});
+                                checkWinCondition();
+                            } else if(hostConn && hostConn.open) { hostConn.send(captMsg); }
                         }
                     }
                 }
@@ -325,8 +346,10 @@
         } else if(gameState === "HUNT") {
             if(!moved) me.fear = Math.min(100, me.fear + 0.4 * dt); else me.fear = Math.max(0, me.fear - 1.2 * dt);
         }
-        if(isHost) broadcast({type: 'POS', id: myId, x: me.x, y: me.y, angle: me.angle, fear: me.fear, isMoving: me.isMoving});
-        else if(hostConn && hostConn.open) hostConn.send({type: 'POS', id: myId, x: me.x, y: me.y, angle: me.angle, fear: me.fear, isMoving: me.isMoving});
+        
+        let syncData = {type: 'POS', id: myId, x: me.x, y: me.y, angle: me.angle, fear: me.fear, isMoving: me.isMoving};
+        if(isHost) broadcast(syncData);
+        else if(hostConn && hostConn.open) hostConn.send(syncData);
     }
 
     function draw() {
@@ -345,6 +368,7 @@
         });
         for(let id in players) {
             let p = players[id];
+            if(p.isCaptured) continue; // On ne dessine pas les capturés
             if(p.team === 'hider') {
                 let isMe = (id === myId);
                 let baseColor = p.isMoving ? "#333" : "#555"; 
@@ -361,9 +385,11 @@
                 ctx.moveTo(84, 0); ctx.lineTo(63, -14); ctx.lineTo(63, 14); ctx.closePath(); ctx.fill(); ctx.restore();
             });
         }
-        if(me.team === 'hider') { 
+        if(me.team === 'hider' && !me.isCaptured) { 
             document.getElementById('fear-ui').classList.remove('hidden'); 
             document.getElementById('fear-fill').style.width = me.fear + "%"; 
+        } else {
+            document.getElementById('fear-ui').classList.add('hidden');
         }
         requestAnimationFrame(draw);
     }
@@ -426,6 +452,7 @@
         gameActive = false; clearInterval(logicInterval); clearInterval(masterTimer);
         canvas.style.display = 'none'; document.getElementById('end-screen').style.display = 'none'; 
         document.getElementById('lobby').style.display = 'block'; 
+        for(let id in players) { players[id].isCaptured = false; players[id].fear = 0; }
         let timeParts = document.getElementById('timerSetting').innerText.split(':');
         gameDuration = parseInt(timeParts[0]) * 60 + parseInt(timeParts[1]);
         updateTimerDisplay(); refreshUI(); 
