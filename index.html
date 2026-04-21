@@ -2,29 +2,41 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Statu Hunt - V4.1 Fixed</title>
+    <title>Statu Hunt - Edition Visuelle</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
-        body { margin: 0; background: #1a1a1a; color: white; font-family: 'Segoe UI', sans-serif; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; }
-        #lobby, #end-screen { background: #2c3e50; padding: 30px; border-radius: 15px; text-align: center; width: 550px; box-shadow: 0 0 30px rgba(0,0,0,0.5); z-index: 100; border: 1px solid #34495e; position: absolute; }
-        #end-screen { display: none; background: rgba(44, 62, 80, 0.98); z-index: 200; }
-        input { padding: 12px; border-radius: 8px; border: none; width: 80%; text-align: center; font-size: 1rem; background: #1a1a1a; color: white; margin-bottom: 10px; }
-        button { padding: 10px 20px; border-radius: 8px; border: none; cursor: pointer; font-weight: bold; transition: 0.2s; margin: 5px; position: relative; z-index: 150; }
-        .btn-blue { background: #3498db; color: white; }
-        .btn-red { background: #e74c3c; color: white; }
-        .btn-green { background: #27ae60; color: white; width: 100%; margin-top: 15px; font-size: 1.1rem; }
-        button:disabled { background: #7f8c8d; cursor: not-allowed; opacity: 0.5; }
-        .config-box { background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px; margin: 15px 0; }
+        body { margin: 0; background: #0a0a0a; color: white; font-family: 'Segoe UI', sans-serif; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        
+        /* LOBBY & UI */
+        #lobby, #end-screen { background: #2c3e50; padding: 30px; border-radius: 15px; text-align: center; width: 550px; box-shadow: 0 0 50px rgba(0,0,0,0.8); z-index: 100; border: 1px solid #34495e; position: absolute; }
+        #end-screen { display: none; background: rgba(20, 30, 48, 0.98); z-index: 200; border: 2px solid #f1c40f; }
+        
+        input { padding: 12px; border-radius: 8px; border: none; width: 80%; text-align: center; font-size: 1rem; background: #1a1a1a; color: white; margin-bottom: 10px; border: 1px solid #34495e; }
+        button { padding: 10px 20px; border-radius: 8px; border: none; cursor: pointer; font-weight: bold; transition: 0.2s; margin: 5px; position: relative; z-index: 150; text-transform: uppercase; letter-spacing: 1px; }
+        .btn-blue { background: #3498db; color: white; box-shadow: 0 4px #2980b9; }
+        .btn-blue:active { transform: translateY(2px); box-shadow: 0 2px #2980b9; }
+        .btn-red { background: #e74c3c; color: white; box-shadow: 0 4px #c0392b; }
+        .btn-green { background: #27ae60; color: white; width: 100%; margin-top: 15px; font-size: 1.1rem; box-shadow: 0 4px #1e8449; }
+        button:disabled { background: #7f8c8d; cursor: not-allowed; opacity: 0.5; box-shadow: none; }
+        
+        .config-box { background: rgba(0,0,0,0.3); padding: 15px; border-radius: 8px; margin: 15px 0; border: 1px solid rgba(255,255,255,0.1); }
         .teams, .end-teams { display: flex; gap: 15px; margin-top: 20px; }
-        .team-box { flex: 1; background: #34495e; padding: 10px; border-radius: 10px; min-height: 150px; }
-        .player-tag { background: rgba(0,0,0,0.2); padding: 8px; margin: 5px 0; border-radius: 6px; font-size: 0.9rem; border-left: 4px solid #f1c40f; text-align: left; }
+        .team-box { flex: 1; background: #1a252f; padding: 10px; border-radius: 10px; min-height: 150px; border: 1px solid #34495e; }
+        .player-tag { background: rgba(52, 152, 219, 0.1); padding: 8px; margin: 5px 0; border-radius: 6px; font-size: 0.9rem; border-left: 4px solid #f1c40f; text-align: left; animation: fadeIn 0.3s ease; }
+        
+        @keyframes fadeIn { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: translateX(0); } }
+
         canvas { position: absolute; top: 0; left: 0; display: none; background: #000; }
-        #ui-game { position: absolute; top: 20px; left: 20px; z-index: 50; display: none; pointer-events: none; }
-        .fear-bar-container { width: 250px; background: rgba(0,0,0,0.5); padding: 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); }
-        .fear-bar { width: 100%; height: 12px; background: #333; border-radius: 6px; overflow: hidden; margin-top: 5px; }
-        #fear-fill { width: 0%; height: 100%; background: #e74c3c; }
+        
+        #ui-game { position: absolute; top: 20px; left: 20px; z-index: 50; display: none; pointer-events: none; width: calc(100% - 40px); }
+        #game-status { color: #f1c40f; font-weight: bold; font-size: 1.8rem; text-shadow: 3px 3px 5px #000; letter-spacing: 2px; }
+        
+        .fear-bar-container { width: 300px; background: rgba(0,0,0,0.7); padding: 12px; border-radius: 10px; border: 2px solid rgba(255,255,255,0.1); margin-top: 10px; backdrop-filter: blur(5px); }
+        .fear-bar { width: 100%; height: 15px; background: #222; border-radius: 10px; overflow: hidden; margin-top: 8px; border: 1px solid #444; }
+        #fear-fill { width: 0%; height: 100%; background: linear-gradient(90deg, #e74c3c, #ff4d4d); transition: width 0.1s; position: relative; }
+        
         .hidden { display: none !important; }
-        #victory-title { font-size: 2.5rem; margin-bottom: 10px; text-transform: uppercase; }
+        #victory-title { font-size: 3rem; margin-bottom: 5px; text-shadow: 0 0 20px rgba(0,0,0,0.5); }
         .win-text { color: #2ecc71; }
         .lose-text { color: #e74c3c; }
     </style>
@@ -32,54 +44,65 @@
 <body>
 
     <div id="lobby">
-        <h1>STATU HUNT</h1>
+        <h1 style="letter-spacing: 5px; color: #f1c40f;">STATU HUNT</h1>
         <div id="step-pseudo">
-            <input type="text" id="pseudoInput" placeholder="Ton pseudo..." onkeydown="if(event.key==='Enter') confirmPseudo()">
-            <br><button class="btn-blue" onclick="confirmPseudo()">CONTINUER</button>
+            <input type="text" id="pseudoInput" placeholder="ENTREZ VOTRE NOM..." maxlength="15" onkeydown="if(event.key==='Enter') confirmPseudo()">
+            <br><button class="btn-blue" onclick="confirmPseudo()">REJOINDRE L'OMBRE</button>
         </div>
+
         <div id="step-menu" class="hidden">
             <button class="btn-blue" onclick="createRoom()">CRÉER UNE SALLE</button>
-            <p>— OU —</p>
-            <input type="text" id="joinInput" placeholder="CODE DE PARTIE">
+            <p style="color: #bdc3c7;">— OU —</p>
+            <input type="text" id="joinInput" placeholder="CODE SECRET">
             <br><button class="btn-blue" onclick="joinRoom()">REJOINDRE</button>
         </div>
+
         <div id="step-room" class="hidden">
-            <div style="background: rgba(0,0,0,0.3); padding: 10px; border-radius: 8px;">
-                CODE : <span id="displayCode" style="color:#f1c40f; font-weight:bold;">---</span>
-                <button id="copyBtn" style="background:#95a5a6; font-size:0.7rem;" onclick="copyCode()">COPIER 📋</button>
+            <div style="background: rgba(0,0,0,0.4); padding: 12px; border-radius: 8px; border: 1px solid #f1c40f;">
+                CODE : <span id="displayCode" style="color:#f1c40f; font-weight:bold; font-size: 1.2rem;">---</span>
+                <button id="copyBtn" style="background:#7f8c8d; font-size:0.7rem; margin-left: 10px;" onclick="copyCode()">COPIER 📋</button>
             </div>
             <div class="config-box">
-                <span style="font-size: 0.8rem;">DURÉE DE LA CHASSE</span><br>
+                <span style="font-size: 0.8rem; color: #bdc3c7;">TEMPS DE SURVIE</span><br>
                 <button id="btnLess" class="btn-blue" onclick="changeTimer(-30)">-</button>
-                <span id="timerSetting" style="font-weight:bold; font-size:1.2rem;">2:00</span>
+                <span id="timerSetting" style="font-weight:bold; font-size:1.5rem; margin: 0 15px;">2:00</span>
                 <button id="btnMore" class="btn-blue" onclick="changeTimer(30)">+</button>
             </div>
             <div class="teams">
-                <div class="team-box"><h4>CHERCHEURS</h4><button onclick="selectTeam('seeker')" class="btn-blue" style="font-size:0.7rem">REJOINDRE</button><div id="list-seekers"></div></div>
-                <div class="team-box"><h4>CACHÉS</h4><button onclick="selectTeam('hider')" class="btn-red" style="font-size:0.7rem">REJOINDRE</button><div id="list-hiders"></div></div>
+                <div class="team-box">
+                    <h4 style="color: #3498db;">CHERCHEURS</h4>
+                    <button onclick="selectTeam('seeker')" class="btn-blue" style="font-size:0.7rem">REJOINDRE</button>
+                    <div id="list-seekers"></div>
+                </div>
+                <div class="team-box">
+                    <h4 style="color: #e74c3c;">CACHÉS</h4>
+                    <button onclick="selectTeam('hider')" class="btn-red" style="font-size:0.7rem">REJOINDRE</button>
+                    <div id="list-hiders"></div>
+                </div>
             </div>
-            <button id="startBtn" class="hidden btn-green" onclick="requestStart()" disabled>ÉQUIPES INCOMPLÈTES...</button>
+            <button id="startBtn" class="hidden btn-green" onclick="requestStart()" disabled>EN ATTENTE DES ÉQUIPES...</button>
         </div>
     </div>
 
     <div id="end-screen">
         <h2 id="victory-title">VICTOIRE !</h2>
-        <p id="victory-desc"></p>
+        <p id="victory-desc" style="font-style: italic; color: #bdc3c7;"></p>
         <div class="end-teams">
             <div class="team-box"><h4>CHERCHEURS</h4><div id="end-seekers"></div></div>
             <div class="team-box"><h4>CACHÉS</h4><div id="end-hiders"></div></div>
         </div>
-        <button id="backToLobbyBtn" class="btn-green" onclick="requestBackToLobby()" style="display:none;">REVENIR AU LOBBY</button>
-        <p id="waitHostText" style="font-size: 0.8rem; color: #bdc3c7; margin-top: 10px;">Attente de l'hôte...</p>
+        <button id="backToLobbyBtn" class="btn-green" onclick="requestBackToLobby()" style="display:none;">RETOURNER AU LOBBY</button>
+        <p id="waitHostText" style="font-size: 0.8rem; color: #bdc3c7; margin-top: 15px;">L'hôte décide du destin de la prochaine partie...</p>
     </div>
 
     <div id="ui-game">
-        <div id="game-status" style="color:#f1c40f; font-weight:bold; font-size:1.5rem; text-shadow: 2px 2px #000;"></div>
+        <div id="game-status"></div>
         <div id="fear-ui" class="fear-bar-container hidden">
-            <span style="font-size:0.8rem; font-weight:bold;">PEUR IMMOBILE</span>
+            <span style="font-size:0.7rem; font-weight:bold; color: #e74c3c; text-transform: uppercase;">Alerte de Panique Immobile</span>
             <div class="fear-bar"><div id="fear-fill"></div></div>
         </div>
     </div>
+
     <canvas id="gameCanvas"></canvas>
 
 <script>
@@ -89,12 +112,14 @@
     
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
-    const mapW = 1500, mapH = 1200, keys = {}, statues = [];
+    const mapW = 2000, mapH = 2000, keys = {}, statues = [];
     let mousePos = { x: 0, y: 0 };
+
+    // --- INITIALISATION & RESEAU ---
 
     function confirmPseudo() {
         myPseudo = document.getElementById('pseudoInput').value.trim();
-        if(myPseudo.length < 2) return alert("Pseudo trop court !");
+        if(myPseudo.length < 2) return alert("Nom trop court !");
         document.getElementById('step-pseudo').classList.add('hidden');
         document.getElementById('step-menu').classList.remove('hidden');
     }
@@ -126,8 +151,7 @@
         peer = new Peer(id);
         peer.on('open', (i) => {
             myId = i;
-            // On s'enregistre soi-même dès que l'ID est prêt
-            players[myId] = {pseudo: myPseudo, team: null, x: 750, y: 600, angle: 0, fear: 0};
+            players[myId] = {pseudo: myPseudo, team: null, x: 1000, y: 1000, angle: 0, fear: 0};
             refreshUI();
         });
         peer.on('connection', (c) => {
@@ -143,7 +167,7 @@
         c.on('open', () => c.send({type: 'JOIN', pseudo: myPseudo}));
         c.on('data', (data) => {
             if(data.type === 'JOIN') {
-                players[c.peer] = {pseudo: data.pseudo, team: null, x: 750, y: 600, angle: 0, fear: 0};
+                players[c.peer] = {pseudo: data.pseudo, team: null, x: 1000, y: 1000, angle: 0, fear: 0};
                 if(isHost) broadcast({type:'SYNC', players: players});
             }
             if(data.type === 'SYNC') { players = data.players; refreshUI(); }
@@ -158,7 +182,7 @@
     function broadcast(data) { if(conn && conn.open) conn.send(data); }
 
     function selectTeam(t) {
-        if(!myId || !players[myId]) return; // Sécurité si l'ID n'est pas encore prêt
+        if(!myId || !players[myId]) return;
         players[myId].team = t;
         refreshUI();
         if(conn) {
@@ -181,13 +205,13 @@
         if(isHost) {
             const btn = document.getElementById('startBtn');
             btn.disabled = !(sCount > 0 && hCount > 0);
-            btn.innerText = (sCount > 0 && hCount > 0) ? "LANCER LA PARTIE" : "ÉQUIPES INCOMPLÈTES...";
+            btn.innerText = (sCount > 0 && hCount > 0) ? "LANCER LA CHASSE" : "ÉQUIPES INCOMPLÈTES...";
         }
     }
 
     function changeTimer(val) {
         if(!isHost) return;
-        gameDuration = Math.max(60, Math.min(300, gameDuration + val));
+        gameDuration = Math.max(60, Math.min(600, gameDuration + val));
         initialDuration = gameDuration;
         updateTimerDisplay();
         broadcast({type: 'SYNC_TIMER', duration: gameDuration});
@@ -199,8 +223,7 @@
     }
 
     function copyCode() {
-        const code = document.getElementById('displayCode').innerText;
-        navigator.clipboard.writeText(code).then(() => {
+        navigator.clipboard.writeText(roomCode).then(() => {
             const btn = document.getElementById('copyBtn');
             btn.innerText = "COPIÉ ! ✅";
             setTimeout(() => btn.innerText = "COPIER 📋", 2000);
@@ -213,6 +236,8 @@
         document.getElementById('displayCode').innerText = code;
     }
 
+    // --- LOGIQUE DE JEU ---
+
     function startClientGame() {
         document.getElementById('lobby').style.display = 'none';
         document.getElementById('end-screen').style.display = 'none';
@@ -221,25 +246,178 @@
         canvas.width = window.innerWidth; canvas.height = window.innerHeight;
         statues.length = 0;
         generateMap(roomCode);
+        
         gameActive = true; gameState = "PREP"; prepTimer = 10;
         lastUpdate = Date.now();
         logicInterval = setInterval(update, 1000/60);
+        
         masterTimer = setInterval(() => {
             if(gameState === "PREP") {
                 prepTimer--;
-                document.getElementById('game-status').innerText = "PRÉPARATION : " + prepTimer + "s";
+                document.getElementById('game-status').innerText = "LES STATUES SE PLACENT : " + prepTimer + "s";
                 if(prepTimer <= 0) gameState = "HUNT";
             } else {
                 gameDuration--;
                 let m = Math.floor(gameDuration/60), s = gameDuration%60;
                 document.getElementById('game-status').innerText = `TEMPS RESTANT : ${m}:${s<10?'0'+s:s}`;
                 if(gameDuration <= 0 && isHost) {
-                    broadcast({type: 'END', winner: 'hiders', reason: "Le temps est écoulé !"});
-                    showEndScreen('hiders', "Le temps est écoulé !");
+                    broadcast({type: 'END', winner: 'hiders', reason: "L'aube s'est levée ! Les cachés ont survécu."});
+                    showEndScreen('hiders', "L'aube s'est levée ! Les cachés ont survécu.");
                 }
             }
         }, 1000);
         requestAnimationFrame(draw);
+    }
+
+    function update() {
+        const me = players[myId];
+        if(!me || !gameActive) return;
+        const now = Date.now();
+        const dt = (now - lastUpdate) / 16.66;
+        lastUpdate = now;
+
+        let moved = false;
+        if(gameState === "PREP" || me.team === "hider" || gameState === "HUNT") {
+            let spd = (me.team === 'seeker' ? 6 : 4.5) * dt;
+            if(keys['z'] || keys['w']) { me.y -= spd; moved = true; }
+            if(keys['s']) { me.y += spd; moved = true; }
+            if(keys['q'] || keys['a']) { me.x -= spd; moved = true; }
+            if(keys['d']) { me.x += spd; moved = true; }
+        }
+
+        me.x = Math.max(0, Math.min(mapW - 25, me.x));
+        me.y = Math.max(0, Math.min(mapH - 25, me.y));
+
+        if(me.team === 'seeker') {
+            me.angle = Math.atan2(mousePos.y - canvas.height/2, mousePos.x - canvas.width/2);
+            if(gameState === "HUNT" && isHost) {
+                for(let id in players) {
+                    let p = players[id];
+                    if(p.team === 'hider' && Math.sqrt((me.x - p.x)**2 + (me.y - p.y)**2) < 35) {
+                        broadcast({type: 'END', winner: 'seekers', reason: `${p.pseudo} a été brisé !`});
+                        showEndScreen('seekers', `${p.pseudo} a été brisé !`);
+                    }
+                }
+            }
+        } else if(gameState === "HUNT") {
+            if(!moved) me.fear = Math.min(100, me.fear + (0.45 * dt));
+            else me.fear = Math.max(0, me.fear - (1.2 * dt));
+        }
+
+        if(conn && conn.open) conn.send({type: 'POS', id: myId, x: me.x, y: me.y, angle: me.angle, fear: me.fear});
+    }
+
+    // --- RENDU GRAPHIQUE ---
+
+    function draw() {
+        if(!gameActive) return;
+        const me = players[myId];
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        const camX = -me.x + canvas.width/2, camY = -me.y + canvas.height/2;
+
+        ctx.save();
+        ctx.translate(camX, camY);
+
+        // 1. SOL PAVÉ
+        ctx.fillStyle = "#111"; ctx.fillRect(0,0, mapW, mapH);
+        ctx.strokeStyle = "#1a1a1a"; ctx.lineWidth = 2;
+        for(let x=0; x<mapW; x+=80) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,mapH); ctx.stroke(); }
+        for(let y=0; y<mapH; y+=80) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(mapW,y); ctx.stroke(); }
+
+        // 2. STATUES DE DÉCOR
+        statues.forEach(s => drawStatue(s.x, s.y, "#555", false));
+
+        // 3. JOUEURS
+        for(let id in players) {
+            const p = players[id];
+            if(p.team === 'hider') {
+                let isScared = p.fear > 80;
+                let ox = isScared ? (Math.random()*2-1) : 0;
+                drawStatue(p.x + ox, p.y, isScared ? "#962d22" : "#555", p.fear >= 100);
+            } else if(p.team === 'seeker') {
+                drawSeeker(p);
+            }
+        }
+        ctx.restore();
+
+        // 4. ÉCLAIRAGE DYNAMIQUE
+        drawLighting(me);
+
+        if(me.team === 'hider') {
+            document.getElementById('fear-ui').classList.remove('hidden');
+            document.getElementById('fear-fill').style.width = me.fear + "%";
+        } else {
+            document.getElementById('fear-ui').classList.add('hidden');
+        }
+        
+        requestAnimationFrame(draw);
+    }
+
+    function drawStatue(x, y, color, pulse) {
+        // Ombre
+        ctx.fillStyle = "rgba(0,0,0,0.5)";
+        ctx.beginPath(); ctx.ellipse(x+12, y+28, 18, 8, 0, 0, Math.PI*2); ctx.fill();
+        // Socle
+        ctx.fillStyle = "#222"; ctx.fillRect(x-4, y+20, 33, 8);
+        // Corps
+        ctx.fillStyle = color; ctx.fillRect(x, y, 25, 22);
+        // Détails pierre
+        ctx.fillStyle = "rgba(0,0,0,0.3)"; ctx.fillRect(x+4, y+4, 5, 5); ctx.fillRect(x+16, y+4, 5, 5);
+        
+        if(pulse) {
+            ctx.beginPath(); ctx.arc(x+12.5, y+11, (Date.now()%800)/10 + 10, 0, Math.PI*2);
+            ctx.strokeStyle = "rgba(231, 76, 60, 0.4)"; ctx.lineWidth = 2; ctx.stroke();
+        }
+    }
+
+    function drawSeeker(p) {
+        // Aura
+        let g = ctx.createRadialGradient(p.x+12, p.y+12, 5, p.x+12, p.y+12, 35);
+        g.addColorStop(0, "rgba(52, 152, 219, 0.4)"); g.addColorStop(1, "transparent");
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(p.x+12, p.y+12, 35, 0, Math.PI*2); ctx.fill();
+        // Corps
+        ctx.fillStyle = "#3498db"; ctx.fillRect(p.x, p.y, 25, 25);
+        ctx.strokeStyle = "#fff"; ctx.lineWidth = 2; ctx.strokeRect(p.x, p.y, 25, 25);
+    }
+
+    function drawLighting(me) {
+        ctx.save();
+        if(me.team === 'seeker') {
+            let cx = canvas.width/2 + 12, cy = canvas.height/2 + 12;
+            ctx.fillStyle = "rgba(0,0,0,0.98)";
+            ctx.beginPath(); ctx.rect(0,0, canvas.width, canvas.height);
+            if(gameState === "HUNT") {
+                ctx.moveTo(cx, cy);
+                ctx.arc(cx, cy, 500, me.angle-0.55, me.angle+0.55);
+            } else {
+                ctx.arc(cx, cy, 100, 0, Math.PI*2);
+            }
+            ctx.fill("evenodd");
+        } else {
+            let grd = ctx.createRadialGradient(canvas.width/2, canvas.height/2, 100, canvas.width/2, canvas.height/2, canvas.width/1.1);
+            grd.addColorStop(0, "transparent"); grd.addColorStop(1, "rgba(0,0,0,0.85)");
+            ctx.fillStyle = grd; ctx.fillRect(0,0, canvas.width, canvas.height);
+        }
+        ctx.restore();
+    }
+
+    // --- OUTILS ---
+
+    function generateMap(seedString) {
+        let seed = 0;
+        for (let i = 0; i < seedString.length; i++) seed += seedString.charCodeAt(i);
+        const pseudoRandom = () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; };
+        for(let i=0; i<150; i++) { // Plus de statues sur une map plus grande
+            let x, y, tooClose, attempts = 0;
+            do {
+                tooClose = false;
+                x = 100 + pseudoRandom() * (mapW - 200);
+                y = 100 + pseudoRandom() * (mapH - 200);
+                for(let s of statues) { if(Math.sqrt((x-s.x)**2 + (y-s.y)**2) < 60) tooClose = true; }
+                attempts++;
+            } while(tooClose && attempts < 50);
+            statues.push({x, y});
+        }
     }
 
     function showEndScreen(winner, reason) {
@@ -249,15 +427,15 @@
         document.getElementById('ui-game').style.display = 'none';
         document.getElementById('end-screen').style.display = 'block';
         const title = document.getElementById('victory-title');
-        title.innerText = (winner === 'seekers') ? "Victoire Chercheurs !" : "Victoire Cachés !";
+        title.innerText = (winner === 'seekers') ? "LES CHASSEURS ONT GAGNÉ !" : "LES STATUES ONT SURVÉCU !";
         title.className = (players[myId].team && players[myId].team.startsWith(winner.substring(0,1))) ? "win-text" : "lose-text";
         document.getElementById('victory-desc').innerText = reason;
         const sList = document.getElementById('end-seekers'), hList = document.getElementById('end-hiders');
         sList.innerHTML = ''; hList.innerHTML = '';
         for(let id in players) {
-            let div = `<div class="player-tag">${players[id].pseudo}</div>`;
-            if(players[id].team === 'seeker') sList.innerHTML += div;
-            else if(players[id].team === 'hider') hList.innerHTML += div;
+            let tag = `<div class="player-tag">${players[id].pseudo}</div>`;
+            if(players[id].team === 'seeker') sList.innerHTML += tag;
+            else if(players[id].team === 'hider') hList.innerHTML += tag;
         }
     }
 
@@ -273,107 +451,17 @@
         document.getElementById('end-screen').style.display = 'none';
         document.getElementById('lobby').style.display = 'block';
         gameDuration = initialDuration;
-        if(players[myId]) { players[myId].fear = 0; players[myId].x = 750; players[myId].y = 600; }
+        if(players[myId]) { players[myId].fear = 0; players[myId].x = 1000; players[myId].y = 1000; }
         updateTimerDisplay();
         refreshUI();
     }
 
-    function generateMap(seedString) {
-        let seed = 0;
-        for (let i = 0; i < seedString.length; i++) seed += seedString.charCodeAt(i);
-        const pseudoRandom = () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; };
-        for(let i=0; i<85; i++) {
-            let x, y, tooClose, attempts = 0;
-            do {
-                tooClose = false;
-                x = 60 + pseudoRandom() * (mapW - 120);
-                y = 60 + pseudoRandom() * (mapH - 120);
-                for(let s of statues) { if(Math.sqrt((x-s.x)**2 + (y-s.y)**2) < 45) tooClose = true; }
-                attempts++;
-            } while(tooClose && attempts < 50);
-            statues.push({x, y});
-        }
-    }
+    function requestStart() { if(isHost) { broadcast({type: 'START'}); startClientGame(); } }
 
     window.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
     window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
     window.addEventListener('mousemove', e => { mousePos.x = e.clientX; mousePos.y = e.clientY; });
 
-    function update() {
-        const me = players[myId];
-        if(!me || !gameActive) return;
-        const now = Date.now();
-        const dt = (now - lastUpdate) / 16.66;
-        lastUpdate = now;
-        let moved = false;
-        if(gameState === "HUNT" || me.team === "hider") {
-            let spd = 5 * dt;
-            if(keys['z'] || keys['w']) { me.y -= spd; moved = true; }
-            if(keys['s']) { me.y += spd; moved = true; }
-            if(keys['q'] || keys['a']) { me.x -= spd; moved = true; }
-            if(keys['d']) { me.x += spd; moved = true; }
-        }
-        me.x = Math.max(0, Math.min(mapW - 25, me.x));
-        me.y = Math.max(0, Math.min(mapH - 25, me.y));
-        if(me.team === 'seeker') {
-            me.angle = Math.atan2(mousePos.y - canvas.height/2, mousePos.x - canvas.width/2);
-            if(gameState === "HUNT" && isHost) {
-                for(let id in players) {
-                    let p = players[id];
-                    if(p.team === 'hider' && Math.sqrt((me.x - p.x)**2 + (me.y - p.y)**2) < 35) {
-                        broadcast({type: 'END', winner: 'seekers', reason: `${p.pseudo} a été démasqué !`});
-                        showEndScreen('seekers', `${p.pseudo} a été démasqué !`);
-                    }
-                }
-            }
-        } else if(gameState === "HUNT") {
-            if(!moved) me.fear = Math.min(100, me.fear + (0.5 * dt));
-            else me.fear = Math.max(0, me.fear - (0.8 * dt));
-        }
-        if(conn && conn.open) conn.send({type: 'POS', id: myId, x: me.x, y: me.y, angle: me.angle, fear: me.fear});
-    }
-
-    function draw() {
-        if(!gameActive) return;
-        const me = players[myId];
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        const camX = -me.x + canvas.width/2, camY = -me.y + canvas.height/2;
-        ctx.save();
-        ctx.translate(camX, camY);
-        ctx.fillStyle = "#111"; ctx.fillRect(0,0, mapW, mapH);
-        ctx.fillStyle = "#7f8c8d";
-        statues.forEach(s => ctx.fillRect(s.x, s.y, 25, 25));
-        for(let id in players) {
-            const p = players[id];
-            if(p.team === 'hider') {
-                ctx.fillStyle = (p.fear > 85) ? "#e74c3c" : "#7f8c8d";
-                ctx.fillRect(p.x, p.y, 25, 25);
-                if(p.fear >= 100) {
-                    ctx.beginPath(); ctx.arc(p.x+12.5, p.y+12.5, (Date.now()%1000)/4, 0, Math.PI*2);
-                    ctx.strokeStyle = "rgba(231, 76, 60, 0.6)"; ctx.stroke();
-                }
-            } else if(p.team === 'seeker') {
-                ctx.fillStyle = "#3498db"; ctx.fillRect(p.x, p.y, 25, 25);
-            }
-        }
-        ctx.restore();
-        if(me.team === 'seeker') {
-            ctx.save(); ctx.fillStyle = "rgba(0,0,0,0.98)"; ctx.beginPath();
-            ctx.rect(0,0, canvas.width, canvas.height);
-            if(gameState === "HUNT") {
-                ctx.moveTo(canvas.width/2+12, canvas.height/2+12);
-                ctx.arc(canvas.width/2+12, canvas.height/2+12, 450, me.angle-0.5, me.angle+0.5);
-            }
-            ctx.fill("evenodd"); 
-            ctx.restore();
-        } else {
-            document.getElementById('fear-ui').classList.remove('hidden');
-            document.getElementById('fear-fill').style.width = me.fear + "%";
-        }
-        requestAnimationFrame(draw);
-    }
-
-    function requestStart() { if(isHost) { broadcast({type: 'START'}); startClientGame(); } }
 </script>
 </body>
 </html>
