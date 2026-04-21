@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Statu Hunt - Correctif Lumière</title>
+    <style>
+        body { margin: 0; background: #000; overflow: hidden; color: white; font-family: sans-serif; }
+        canvas { display: block; }
+        #hud { position: absolute; top: 20px; left: 20px; pointer-events: none; z-index: 10; }
+        .fear-bar { width: 200px; height: 15px; background: #333; border: 1px solid #fff; }
+        #fear-fill { width: 0%; height: 100%; background: #e74c3c; }
+    </style>
+</head>
+<body>
+
+    <div id="hud">
+        <div id="status" style="font-weight:bold; color:#f1c40f;">PHASE DE PRÉPARATION (10s)</div>
+        <div style="margin-top:10px;">PEUR :</div>
+        <div class="fear-bar"><div id="fear-fill"></div></div>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    const mapW = 1500; // Map plus grande
+    const mapH = 1200;
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    let gameActive = false;
+    let timer = 10;
+    const statues = [];
+    for(let i=0; i<80; i++) statues.push({x: Math.random()*(mapW-30), y: Math.random()*(mapH-30)});
+
+    const hider = { x: 200, y: 200, size: 25, speed: 5, fear: 0, sonarRadius: 0 };
+    const seeker = { x: 1300, y: 1000, size: 25, speed: 4, angle: 0 };
+    let mousePos = { x: 0, y: 0 };
+
+    window.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
+    window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
+    const keys = {};
+    window.addEventListener('mousemove', e => { mousePos.x = e.clientX; mousePos.y = e.clientY; });
+
+    const startTimer = setInterval(() => {
+        timer--;
+        if(timer <= 0) { 
+            gameActive = true; 
+            document.getElementById('status').innerText = "LA CHASSE EST OUVERTE !"; 
+            clearInterval(startTimer); 
+        } else {
+            document.getElementById('status').innerText = "PRÉPARATION : " + timer + "s";
+        }
+    }, 1000);
+
+    function update() {
+        // Mouvement Caché
+        let hMoving = false;
+        if (keys['z'] || keys['w']) { hider.y -= hider.speed; hMoving = true; }
+        if (keys['s']) { hider.y += hider.speed; hMoving = true; }
+        if (keys['q'] || keys['a']) { hider.x -= hider.speed; hMoving = true; }
+        if (keys['d']) { hider.x += hider.speed; hMoving = true; }
+        
+        hider.x = Math.max(0, Math.min(mapW - hider.size, hider.x));
+        hider.y = Math.max(0, Math.min(mapH - hider.size, hider.y));
+
+        if(!hMoving && gameActive) {
+            hider.fear = Math.min(100, hider.fear + 0.3);
+        } else {
+            hider.fear = Math.max(0, hider.fear - 0.7);
+        }
+        document.getElementById('fear-fill').style.width = hider.fear + "%";
+
+        if(hider.fear >= 100) {
+            hider.sonarRadius += 3;
+            if(hider.sonarRadius > 200) hider.sonarRadius = 0;
+        } else { hider.sonarRadius = 0; }
+
+        // Mouvement Chercheur
+        if(gameActive) {
+            if (keys['arrowup']) seeker.y -= seeker.speed;
+            if (keys['arrowdown']) seeker.y += seeker.speed;
+            if (keys['arrowleft']) seeker.x -= seeker.speed;
+            if (keys['arrowright']) seeker.x += seeker.speed;
+            
+            const screenCenterX = canvas.width/2;
+            const screenCenterY = canvas.height/2;
+            seeker.angle = Math.atan2(mousePos.y - screenCenterY, mousePos.x - screenCenterX);
+        }
+
+        seeker.x = Math.max(0, Math.min(mapW - seeker.size, seeker.x));
+        seeker.y = Math.max(0, Math.min(mapH - seeker.size, seeker.y));
+
+        let dist = Math.sqrt((seeker.x - hider.x)**2 + (seeker.y - hider.y)**2);
+        if(dist < 25 && gameActive) { alert("TROUVÉ !"); location.reload(); }
+    }
+
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        // On centre la caméra sur le chercheur
+        const camX = -seeker.x + canvas.width / 2;
+        const camY = -seeker.y + canvas.height / 2;
+
+        ctx.save();
+        ctx.translate(camX, camY);
+
+        // Fond et Statues
+        ctx.fillStyle = "#1a252f";
+        ctx.fillRect(0, 0, mapW, mapH);
+        ctx.strokeStyle = "white";
+        ctx.strokeRect(0,0, mapW, mapH);
+
+        ctx.fillStyle = "#7f8c8d";
+        statues.forEach(s => ctx.fillRect(s.x, s.y, 30, 30));
+
+        // Le Caché (Rouge si bouge ou peur, sinon gris)
+        let isMoving = (keys['z'] || keys['s'] || keys['q'] || keys['d'] || keys['w'] || keys['a']);
+        ctx.fillStyle = (isMoving || hider.fear > 80) ? "#e74c3c" : "#7f8c8d";
+        ctx.fillRect(hider.x, hider.y, 25, 25);
+
+        // Sonar (visible même dans le noir car dessiné APRÈS l'ombre si on veut, mais ici on le met sur la map)
+        if(hider.sonarRadius > 0) {
+            ctx.beginPath();
+            ctx.arc(hider.x + 12, hider.y + 12, hider.sonarRadius, 0, Math.PI*2);
+            ctx.strokeStyle = "rgba(255, 0, 0, " + (1 - hider.sonarRadius/200) + ")";
+            ctx.lineWidth = 3;
+            ctx.stroke();
+        }
+
+        // Le Chercheur
+        ctx.fillStyle = "#3498db";
+        ctx.fillRect(seeker.x, seeker.y, 25, 25);
+
+        ctx.restore();
+
+        // --- CALQUE D'OBSCURITÉ ---
+        if(gameActive) {
+            ctx.save();
+            // Créer un masque noir sur tout l'écran
+            ctx.fillStyle = "rgba(0,0,0,0.95)"; 
+            
+            // On utilise une technique de "découpage"
+            ctx.beginPath();
+            ctx.rect(0, 0, canvas.width, canvas.height); // Rectangle total
+            
+            // On dessine le cône de lumière (le trou dans le noir)
+            const cx = canvas.width / 2 + 12;
+            const cy = canvas.height / 2 + 12;
+            ctx.moveTo(cx, cy);
+            ctx.arc(cx, cy, 500, seeker.angle - 0.5, seeker.angle + 0.5);
+            ctx.lineTo(cx, cy);
+            
+            // "evenodd" permet de faire un trou dans le premier rectangle
+            ctx.fill("evenodd");
+            ctx.restore();
+        } else {
+            // Écran de préparation
+            ctx.fillStyle = "black";
+            ctx.fillRect(0,0, canvas.width, canvas.height);
+            ctx.fillStyle = "white";
+            ctx.textAlign = "center";
+            ctx.fillText("LES CHERCHEURS ONT LES YEUX FERMÉS... CACHEZ-VOUS !", canvas.width/2, canvas.height/2);
+        }
+
+        requestAnimationFrame(() => { update(); draw(); });
+    }
+
+    draw();
+</script>
+</body>
+</html>
