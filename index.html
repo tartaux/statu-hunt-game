@@ -2,10 +2,11 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Statu Hunt - Tactical Vision</title>
+    <title>Statu Hunt - Tactical Final</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         body { margin: 0; background: #0a0a0a; color: white; font-family: 'Segoe UI', sans-serif; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        
         #lobby, #end-screen { background: #2c3e50; padding: 30px; border-radius: 15px; text-align: center; width: 550px; box-shadow: 0 0 50px rgba(0,0,0,0.8); z-index: 100; border: 1px solid #34495e; position: absolute; }
         #end-screen { display: none; background: rgba(20, 30, 48, 0.98); z-index: 200; border: 2px solid #f1c40f; }
         
@@ -247,6 +248,7 @@
         lastUpdate = Date.now();
         logicInterval = setInterval(update, 1000/60);
         masterTimer = setInterval(() => {
+            if(!gameActive) return;
             if(gameState === "PREP") {
                 prepTimer--;
                 document.getElementById('game-status').innerText = "LES STATUES SE PLACENT : " + prepTimer + "s";
@@ -255,9 +257,12 @@
                 gameDuration--;
                 let m = Math.floor(gameDuration/60), s = gameDuration%60;
                 document.getElementById('game-status').innerText = `TEMPS RESTANT : ${m}:${s<10?'0'+s:s}`;
+                
+                // FIN DE PARTIE : VICTOIRE DES CACHES
                 if(gameDuration <= 0 && isHost) {
-                    broadcast({type: 'END', winner: 'hiders', reason: "Le temps est écoulé ! Les statues sont victorieuses."});
-                    showEndScreen('hiders', "Le temps est écoulé ! Les statues sont victorieuses.");
+                    gameActive = false;
+                    broadcast({type: 'END', winner: 'hiders', reason: "Le temps est écoulé ! Les statues ont survécu."});
+                    showEndScreen('hiders', "Le temps est écoulé ! Les statues ont survécu.");
                 }
             }
         }, 1000);
@@ -288,12 +293,18 @@
 
         if(me.team === 'seeker') {
             me.angle = Math.atan2(mousePos.y - canvas.height/2, mousePos.x - canvas.width/2);
+            
+            // DETECTION DE COLLISION (FONCTION KILL)
             if(gameState === "HUNT" && isHost) {
                 for(let id in players) {
                     let p = players[id];
-                    if(p.team === 'hider' && Math.sqrt((me.x - p.x)**2 + (me.y - p.y)**2) < 35) {
-                        broadcast({type: 'END', winner: 'seekers', reason: `${p.pseudo} a été brisé !`});
-                        showEndScreen('seekers', `${p.pseudo} a été brisé !`);
+                    if(p.team === 'hider') {
+                        let dist = Math.sqrt((me.x - p.x)**2 + (me.y - p.y)**2);
+                        if(dist < 35) { // Si le chercheur touche le caché
+                            gameActive = false;
+                            broadcast({type: 'END', winner: 'seekers', reason: `${p.pseudo} a été brisé par l'intrus !`});
+                            showEndScreen('seekers', `${p.pseudo} a été brisé par l'intrus !`);
+                        }
                     }
                 }
             }
@@ -319,7 +330,7 @@
         for(let x=0; x<mapW; x+=80) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,mapH); ctx.stroke(); }
         for(let y=0; y<mapH; y+=80) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(mapW,y); ctx.stroke(); }
 
-        // STATUES DE DÉCOR
+        // DECOR
         statues.forEach(s => drawStatue(s.x, s.y, "#555", false, false));
 
         // JOUEURS
@@ -330,7 +341,9 @@
                 let color = (isMe || me.team !== 'seeker') && p.fear > 80 ? "#962d22" : "#555";
                 let pulse = (p.fear >= 100);
                 let shake = (p.fear > 80);
-                let ox = shake ? (Math.random()*2-1) : 0;
+                
+                // Vibrations ralenties et plus douces
+                let ox = shake ? (Math.sin(Date.now() / 30) * 1.5) : 0;
                 drawStatue(p.x + ox, p.y, color, pulse, isMe);
             } else if(p.team === 'seeker') {
                 drawSeeker(p);
@@ -338,7 +351,6 @@
         }
         ctx.restore();
 
-        // ÉCLAIRAGE (C'est ici que la magie opère pour les cachés)
         drawLighting(me);
 
         if(me.team === 'hider') {
@@ -375,7 +387,6 @@
         const camX = -me.x + canvas.width/2, camY = -me.y + canvas.height/2;
 
         if(me.team === 'seeker') {
-            // VISION CHASSEUR : Noir opaque sauf cône
             let cx = canvas.width/2 + 12, cy = canvas.height/2 + 12;
             ctx.fillStyle = "rgba(0,0,0,1)";
             ctx.beginPath(); ctx.rect(0,0, canvas.width, canvas.height);
@@ -389,12 +400,10 @@
                 ctx.fillText("VOUS ÊTES AVEUGLE... LES STATUES SE CACHENT.", canvas.width/2, canvas.height/2);
             }
         } else {
-            // VISION CACHÉ : Vignettage ambiant + LAMPE DU CHASSEUR
             let grd = ctx.createRadialGradient(canvas.width/2, canvas.height/2, 100, canvas.width/2, canvas.height/2, canvas.width/1.1);
             grd.addColorStop(0, "transparent"); grd.addColorStop(1, "rgba(0,0,0,0.85)");
             ctx.fillStyle = grd; ctx.fillRect(0,0, canvas.width, canvas.height);
 
-            // DESSINER LA LAMPE DU CHASSEUR SUR L'ÉCRAN DU CACHÉ
             if(gameState === "HUNT") {
                 for(let id in players) {
                     let p = players[id];
@@ -402,17 +411,11 @@
                         ctx.save();
                         ctx.translate(camX + p.x + 12, camY + p.y + 12);
                         ctx.rotate(p.angle);
-                        
                         let beam = ctx.createRadialGradient(0, 0, 50, 0, 0, 500);
                         beam.addColorStop(0, "rgba(255, 255, 200, 0.2)");
                         beam.addColorStop(1, "transparent");
-                        
-                        ctx.fillStyle = beam;
-                        ctx.beginPath();
-                        ctx.moveTo(0,0);
-                        ctx.arc(0, 0, 500, -0.55, 0.55);
-                        ctx.fill();
-                        ctx.restore();
+                        ctx.fillStyle = beam; ctx.beginPath(); ctx.moveTo(0,0);
+                        ctx.arc(0, 0, 500, -0.55, 0.55); ctx.fill(); ctx.restore();
                     }
                 }
             }
@@ -438,13 +441,15 @@
     }
 
     function showEndScreen(winner, reason) {
-        gameActive = false; clearInterval(logicInterval); clearInterval(masterTimer);
+        gameActive = false;
+        clearInterval(logicInterval);
+        clearInterval(masterTimer);
         document.getElementById('ui-game').style.display = 'none';
         document.getElementById('end-screen').style.display = 'block';
         const title = document.getElementById('victory-title');
         title.innerText = (winner === 'seekers') ? "L'INTRUS A GAGNÉ !" : "LES STATUES SONT SAUVES !";
-        title.className = (players[myId].team && players[myId].team.startsWith(winner.substring(0,1))) ? "win-text" : "lose-text";
         document.getElementById('victory-desc').innerText = reason;
+        
         const sList = document.getElementById('end-seekers'), hList = document.getElementById('end-hiders');
         sList.innerHTML = ''; hList.innerHTML = '';
         for(let id in players) {
@@ -455,12 +460,17 @@
     }
 
     function requestBackToLobby() { if(!isHost) return; broadcast({type: 'BACK_LOBBY'}); resetToLobby(); }
+    
     function resetToLobby() {
-        gameActive = false; canvas.style.display = 'none';
+        gameActive = false;
+        clearInterval(logicInterval);
+        clearInterval(masterTimer);
+        canvas.style.display = 'none';
         document.getElementById('end-screen').style.display = 'none';
         document.getElementById('lobby').style.display = 'block';
         gameDuration = initialDuration;
-        updateTimerDisplay(); refreshUI();
+        updateTimerDisplay();
+        refreshUI();
     }
     
     function requestStart() { 
