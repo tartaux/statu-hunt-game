@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Statu Hunt - Huge Maps</title>
+    <title>Statu Hunt - Reset Fix</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         body { margin: 0; background: #0a0a0a; color: white; font-family: 'Segoe UI', sans-serif; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; }
@@ -113,8 +113,8 @@
         if(!isHost) return;
         mapSizeKey = size;
         if(size === 'S') { mapW = 2000; mapH = 2000; }
-        if(size === 'M') { mapW = 2830; mapH = 2830; } // Surface x2 (sqrt(2)*2000)
-        if(size === 'L') { mapW = 3465; mapH = 3465; } // Surface x3 (sqrt(3)*2000)
+        if(size === 'M') { mapW = 2830; mapH = 2830; }
+        if(size === 'L') { mapW = 3465; mapH = 3465; }
         
         document.querySelectorAll('.size-btn').forEach(b => b.classList.remove('active'));
         document.getElementById('size-' + size).classList.add('active');
@@ -222,9 +222,19 @@
         document.getElementById('ui-game').style.display = 'block';
         canvas.style.display = 'block';
         canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+        
         statues.length = 0; generateMap(roomCode);
+        
+        // Reset game duration based on lobby setting
+        let timeParts = document.getElementById('timerSetting').innerText.split(':');
+        gameDuration = parseInt(timeParts[0]) * 60 + parseInt(timeParts[1]);
+
         gameActive = true; gameState = "PREP"; prepTimer = 10;
         lastUpdate = Date.now();
+        
+        clearInterval(logicInterval);
+        clearInterval(masterTimer);
+
         logicInterval = setInterval(update, 1000/60);
         masterTimer = setInterval(() => {
             if(!gameActive) return;
@@ -355,8 +365,8 @@
         
         statues.length = 0;
         let targetStatues = 180;
-        if(mapSizeKey === 'M') targetStatues = 360; // 2x plus de statues pour 2x plus de surface
-        if(mapSizeKey === 'L') targetStatues = 540; // 3x plus de statues pour 3x plus de surface
+        if(mapSizeKey === 'M') targetStatues = 360;
+        if(mapSizeKey === 'L') targetStatues = 540;
 
         let attempts = 0;
         while(statues.length < targetStatues && attempts < 8000) {
@@ -382,7 +392,25 @@
     }
 
     function requestBackToLobby() { if(isHost) { broadcast({type: 'BACK_LOBBY'}); resetToLobby(); } }
-    function resetToLobby() { gameActive = false; canvas.style.display = 'none'; document.getElementById('end-screen').style.display = 'none'; document.getElementById('lobby').style.display = 'block'; refreshUI(); }
+    
+    function resetToLobby() { 
+        gameActive = false; 
+        clearInterval(logicInterval); 
+        clearInterval(masterTimer);
+        canvas.style.display = 'none'; 
+        document.getElementById('end-screen').style.display = 'none'; 
+        document.getElementById('lobby').style.display = 'block'; 
+        
+        // Reset fear for all players
+        for(let id in players) {
+            players[id].fear = 0;
+        }
+        document.getElementById('fear-fill').style.width = "0%";
+        
+        updateTimerDisplay();
+        refreshUI(); 
+    }
+
     function requestStart() { if(isHost) { randomizeSpawns(); broadcast({type: 'START', players: players}); startClientGame(); } }
 
     window.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
