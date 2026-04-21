@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Statu Hunt - Spectator & Fear Effects</title>
+    <title>Statu Hunt - Fear & Spectator</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         body { margin: 0; background: #0a0a0a; color: white; font-family: 'Segoe UI', sans-serif; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; }
@@ -181,14 +181,11 @@
             
             if(data.type === 'CAPTURE') {
                 if(players[data.targetId]) players[data.targetId].isCaptured = true;
-                if(isHost) {
-                    broadcast({type: 'SYNC', players: players});
-                    checkWinCondition();
-                }
+                if(isHost) { broadcast({type: 'SYNC', players: players}); checkWinCondition(); }
             }
 
             if(data.type === 'POS') { if(players[data.id]) players[data.id] = {...players[data.id], ...data}; }
-            if(data.type === 'SHOCKWAVE') { waves.push({x: data.x, y: data.y, r: 0, maxR: mapW, owner: data.owner}); }
+            if(data.type === 'SHOCKWAVE') { waves.push({x: data.x, y: data.y, r: 0, maxR: data.maxR, owner: data.owner, waveType: data.waveType}); }
             if(data.type === 'FEAR_HIT' && data.targetId === myId && !players[myId].isCaptured) { players[myId].fear = Math.min(100, players[myId].fear + data.amount); }
         });
         if(!isHost && c === hostConn) {
@@ -198,22 +195,17 @@
 
     function checkWinCondition() {
         let activeHiders = 0;
-        for(let id in players) {
-            if(players[id].team === 'hider' && !players[id].isCaptured) activeHiders++;
-        }
+        for(let id in players) { if(players[id].team === 'hider' && !players[id].isCaptured) activeHiders++; }
         if(activeHiders === 0 && gameActive) {
             broadcast({type: 'END', winner: 'seekers', reason: "Tous les intrus ont été brisés !"});
             showEndScreen('seekers', "Tous les intrus ont été brisés !");
         }
     }
 
-    function broadcast(data) {
-        connections.forEach(c => { if(c.open) c.send(data); });
-    }
+    function broadcast(data) { connections.forEach(c => { if(c.open) c.send(data); }); }
 
     function selectTeam(t) {
-        players[myId].team = t;
-        refreshUI();
+        players[myId].team = t; refreshUI();
         if(isHost) broadcast({type: 'SYNC', players: players});
         else if(hostConn && hostConn.open) hostConn.send({type: 'SYNC', players: players});
     }
@@ -248,8 +240,7 @@
         do { hX = margin + Math.random() * (mapW - margin*2); hY = margin + Math.random() * (mapH - margin*2); } 
         while (Math.sqrt((sX-hX)**2 + (sY-hY)**2) < mapW/2);
         for(let id in players) { 
-            players[id].isCaptured = false;
-            players[id].fear = 0;
+            players[id].isCaptured = false; players[id].fear = 0;
             if(players[id].team === 'seeker') { players[id].x = sX; players[id].y = sY; } 
             else { players[id].x = hX; players[id].y = hY; } 
         }
@@ -270,12 +261,10 @@
         masterTimer = setInterval(() => {
             if(!gameActive) return;
             if(gameState === "PREP") {
-                prepTimer--;
-                document.getElementById('game-status').innerText = "PRÉPARATION : " + prepTimer + "s";
+                prepTimer--; document.getElementById('game-status').innerText = "PRÉPARATION : " + prepTimer + "s";
                 if(prepTimer <= 0) gameState = "HUNT";
             } else {
-                gameDuration--;
-                let m = Math.floor(gameDuration/60), s = gameDuration%60;
+                gameDuration--; let m = Math.floor(gameDuration/60), s = gameDuration%60;
                 document.getElementById('game-status').innerText = "TEMPS : " + `${m}:${s<10?'0'+s:s}`;
                 if(gameDuration <= 0 && isHost) { broadcast({type: 'END', winner: 'hiders', reason: "Temps écoulé !"}); showEndScreen('hiders', "Temps écoulé !"); }
             }
@@ -303,7 +292,8 @@
 
         for(let i = waves.length - 1; i >= 0; i--) {
             let w = waves[i]; w.r += 12 * dt;
-            if(w.owner === myId && me.team === 'seeker') {
+            // Uniquement les ondes de type SEEKER déclenchent la détection
+            if(w.owner === myId && me.team === 'seeker' && w.waveType === 'seeker') {
                 for(let id in players) {
                     let p = players[id];
                     if(p.team === 'hider' && !p.isCaptured && !w['hit_'+id]) {
@@ -344,19 +334,17 @@
             } else if(gameState === "HUNT") {
                 if(!moved) me.fear = Math.min(100, me.fear + 0.4 * dt); else me.fear = Math.max(0, me.fear - 1.2 * dt);
                 
-                // EFFET JAUGE PLEINE : ONDE DE PEUR AUTOMATIQUE
                 if(me.fear >= 100) {
                     me.fear = 0;
-                    let waveData = {type: 'SHOCKWAVE', x: me.x + 12, y: me.y + 12, owner: myId};
-                    waves.push({x: waveData.x, y: waveData.y, r: 0, maxR: mapW, owner: myId});
+                    let waveData = {type: 'SHOCKWAVE', x: me.x + 12, y: me.y + 12, owner: myId, maxR: 150, waveType: 'fear'};
+                    waves.push({x: waveData.x, y: waveData.y, r: 0, maxR: 150, owner: myId, waveType: 'fear'});
                     if(isHost) broadcast(waveData); else if(hostConn && hostConn.open) hostConn.send(waveData);
                 }
             }
         }
         
         let syncData = {type: 'POS', id: myId, x: me.x, y: me.y, angle: me.angle, fear: me.fear, isMoving: me.isMoving, isCaptured: me.isCaptured};
-        if(isHost) broadcast(syncData);
-        else if(hostConn && hostConn.open) hostConn.send(syncData);
+        if(isHost) broadcast(syncData); else if(hostConn && hostConn.open) hostConn.send(syncData);
     }
 
     function draw() {
@@ -369,10 +357,17 @@
         ctx.strokeStyle = "#f1c40f"; ctx.lineWidth = 10; ctx.strokeRect(0,0, mapW, mapH);
         ctx.fillStyle = "#111"; ctx.fillRect(0,0, mapW, mapH);
         statues.forEach(s => drawStatue(s.x, s.y, "#555", false, false, false, false, 0));
+        
         waves.forEach(w => {
             ctx.beginPath(); ctx.arc(w.x, w.y, w.r, 0, Math.PI * 2);
-            ctx.strokeStyle = `rgba(52, 152, 219, ${1 - w.r/w.maxR})`; ctx.lineWidth = 4; ctx.stroke();
+            if(w.waveType === 'fear') {
+                ctx.strokeStyle = `rgba(231, 76, 60, ${1 - w.r/w.maxR})`; // ROUGE pour la peur
+            } else {
+                ctx.strokeStyle = `rgba(52, 152, 219, ${1 - w.r/w.maxR})`; // BLEU pour le chercheur
+            }
+            ctx.lineWidth = 4; ctx.stroke();
         });
+
         for(let id in players) {
             let p = players[id];
             let isMe = (id === myId);
@@ -398,21 +393,16 @@
         if(me.team === 'hider' && !me.isCaptured) { 
             document.getElementById('fear-ui').classList.remove('hidden'); 
             document.getElementById('fear-fill').style.width = me.fear + "%"; 
-        } else {
-            document.getElementById('fear-ui').classList.add('hidden');
-        }
+        } else { document.getElementById('fear-ui').classList.add('hidden'); }
         requestAnimationFrame(draw);
     }
 
     function drawStatue(x, y, color, pulse, isSelf, moving, isGhost, fearValue) {
         ctx.save();
-        // EFFET DE TREMBLEMENT SI PEUR ÉLEVÉE
         if(!isGhost && fearValue > 50) {
             let intensity = (fearValue - 50) / 15;
-            x += (Math.random() - 0.5) * intensity;
-            y += (Math.random() - 0.5) * intensity;
+            x += (Math.random() - 0.5) * intensity; y += (Math.random() - 0.5) * intensity;
         }
-
         if(isGhost) {
             ctx.fillStyle = "rgba(255,255,255,0.4)";
             ctx.beginPath(); ctx.ellipse(x-5, y+10, 10, 5, -0.5, 0, Math.PI*2); ctx.fill();
@@ -431,8 +421,7 @@
         ctx.save();
         const camX = -me.x + canvas.width/2, camY = -me.y + canvas.height/2;
         if(me.isCaptured) {
-            ctx.fillStyle = "rgba(255,255,255,0.05)";
-            ctx.fillRect(0,0, canvas.width, canvas.height);
+            ctx.fillStyle = "rgba(255,255,255,0.05)"; ctx.fillRect(0,0, canvas.width, canvas.height);
         } else if(me.team === 'seeker') {
             ctx.fillStyle = "black"; ctx.beginPath(); ctx.rect(0,0, canvas.width, canvas.height);
             if(gameState === "HUNT") { ctx.moveTo(canvas.width/2+12, canvas.height/2+12); ctx.arc(canvas.width/2+12, canvas.height/2+12, 550, me.angle-0.55, me.angle+0.55); ctx.fill("evenodd"); }
@@ -496,8 +485,8 @@
         if(gameActive && !me.isCaptured && gameState === "HUNT" && me.team === 'seeker' && e.button === 0) {
             if(Date.now() - lastShockwave > 4000) {
                 lastShockwave = Date.now();
-                let waveData = {type: 'SHOCKWAVE', x: me.x + 12, y: me.y + 12, owner: myId};
-                waves.push({x: waveData.x, y: waveData.y, r: 0, maxR: mapW, owner: myId});
+                let waveData = {type: 'SHOCKWAVE', x: me.x + 12, y: me.y + 12, owner: myId, maxR: mapW, waveType: 'seeker'};
+                waves.push({x: waveData.x, y: waveData.y, r: 0, maxR: mapW, owner: myId, waveType: 'seeker'});
                 if(isHost) broadcast(waveData); else if(hostConn && hostConn.open) hostConn.send(waveData);
             }
         }
