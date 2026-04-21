@@ -2,17 +2,19 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Statu Hunt - Final V4</title>
+    <title>Statu Hunt - Final V4 Fixed</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         body { margin: 0; background: #1a1a1a; color: white; font-family: 'Segoe UI', sans-serif; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; }
         
         /* LOBBY & UI */
         #lobby, #end-screen { background: #2c3e50; padding: 30px; border-radius: 15px; text-align: center; width: 550px; box-shadow: 0 0 30px rgba(0,0,0,0.5); z-index: 100; border: 1px solid #34495e; position: absolute; }
-        #end-screen { display: none; background: rgba(44, 62, 80, 0.95); }
+        
+        /* Correction ici : display none par défaut pour ne pas bloquer les clics */
+        #end-screen { display: none; background: rgba(44, 62, 80, 0.98); z-index: 200; }
         
         input { padding: 12px; border-radius: 8px; border: none; width: 80%; text-align: center; font-size: 1rem; background: #1a1a1a; color: white; margin-bottom: 10px; }
-        button { padding: 10px 20px; border-radius: 8px; border: none; cursor: pointer; font-weight: bold; transition: 0.2s; margin: 5px; }
+        button { padding: 10px 20px; border-radius: 8px; border: none; cursor: pointer; font-weight: bold; transition: 0.2s; margin: 5px; position: relative; z-index: 150; }
         .btn-blue { background: #3498db; color: white; }
         .btn-red { background: #e74c3c; color: white; }
         .btn-green { background: #27ae60; color: white; width: 100%; margin-top: 15px; font-size: 1.1rem; }
@@ -100,7 +102,6 @@
     const mapW = 1500, mapH = 1200, keys = {}, statues = [];
     let mousePos = { x: 0, y: 0 };
 
-    // --- LOBBY LOGIC ---
     function confirmPseudo() {
         myPseudo = document.getElementById('pseudoInput').value.trim();
         if(myPseudo.length < 2) return alert("Pseudo trop court !");
@@ -120,8 +121,12 @@
 
     function joinRoom() {
         roomCode = document.getElementById('joinInput').value.toUpperCase().trim();
+        if(!roomCode) return alert("Entrez un code !");
         setupPeer();
-        setTimeout(() => { conn = peer.connect('SH-' + roomCode); initConn(conn); }, 800);
+        setTimeout(() => { 
+            conn = peer.connect('SH-' + roomCode); 
+            initConn(conn); 
+        }, 800);
         showRoom(roomCode);
         document.getElementById('btnLess').style.display = 'none';
         document.getElementById('btnMore').style.display = 'none';
@@ -184,7 +189,20 @@
             if(players[id].team === 'seeker') { sCount++; sDiv.innerHTML += `<div class="player-tag">${players[id].pseudo}</div>`; }
             if(players[id].team === 'hider') { hCount++; hDiv.innerHTML += `<div class="player-tag">${players[id].pseudo}</div>`; }
         }
-        if(isHost) document.getElementById('startBtn').disabled = !(sCount > 0 && hCount > 0);
+        if(isHost) {
+            const btn = document.getElementById('startBtn');
+            btn.disabled = !(sCount > 0 && hCount > 0);
+            btn.innerText = (sCount > 0 && hCount > 0) ? "LANCER LA PARTIE" : "ÉQUIPES INCOMPLÈTES...";
+        }
+    }
+
+    function copyCode() {
+        const code = document.getElementById('displayCode').innerText;
+        navigator.clipboard.writeText(code).then(() => {
+            const btn = document.getElementById('copyBtn');
+            btn.innerText = "COPIÉ ! ✅";
+            setTimeout(() => btn.innerText = "COPIER 📋", 2000);
+        });
     }
 
     function showRoom(code) {
@@ -193,7 +211,6 @@
         document.getElementById('displayCode').innerText = code;
     }
 
-    // --- JEU ---
     function startClientGame() {
         document.getElementById('lobby').style.display = 'none';
         document.getElementById('end-screen').style.display = 'none';
@@ -260,7 +277,6 @@
         document.getElementById('end-screen').style.display = 'none';
         document.getElementById('lobby').style.display = 'block';
         gameDuration = initialDuration;
-        // Reset local player
         if(players[myId]) { players[myId].fear = 0; players[myId].x = 750; players[myId].y = 600; }
         updateTimerDisplay();
         refreshUI();
@@ -366,6 +382,8 @@
         }
         requestAnimationFrame(draw);
     }
+
+    function requestStart() { if(isHost) { broadcast({type: 'START'}); startClientGame(); } }
 </script>
 </body>
 </html>
