@@ -2,39 +2,18 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Statu Hunt - Multiplayer Lobby</title>
+    <title>Statu Hunt - Fix Lobby</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
-        body { margin: 0; background: #1a1a1a; color: white; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; }
-        
-        #lobby { background: #2c3e50; padding: 30px; border-radius: 15px; text-align: center; width: 650px; box-shadow: 0 0 30px rgba(0,0,0,0.7); border: 1px solid #34495e; }
-        
-        h1 { color: #f1c40f; margin-bottom: 30px; letter-spacing: 2px; }
-
-        .input-group { margin: 20px 0; }
-        input { padding: 12px; border-radius: 8px; border: 2px solid #34495e; background: #1a1a1a; color: white; text-align: center; font-size: 1.1rem; width: 80%; outline: none; }
-        input:focus { border-color: #3498db; }
-        
-        .teams-container { display: flex; justify-content: space-between; margin-top: 25px; gap: 20px; }
-        .team-box { flex: 1; background: #34495e; padding: 15px; border-radius: 12px; min-height: 200px; display: flex; flex-direction: column; }
-        .team-chercheur { border-bottom: 6px solid #3498db; }
-        .team-cache { border-bottom: 6px solid #e74c3c; }
-        
-        .player-list { margin-top: 15px; flex-grow: 1; }
-        .player-name { background: rgba(0,0,0,0.3); margin: 6px 0; padding: 8px; border-radius: 6px; font-size: 0.95rem; border-left: 3px solid #f1c40f; text-align: left; }
-        
-        button { padding: 12px 24px; border-radius: 8px; border: none; cursor: pointer; font-weight: bold; font-size: 1rem; transition: all 0.2s ease; margin: 5px; }
-        button:hover:not(:disabled) { transform: translateY(-2px); filter: brightness(1.2); }
-        button:active:not(:disabled) { transform: translateY(0); }
-        
-        .btn-blue { background: #3498db; color: white; }
-        .btn-red { background: #e74c3c; color: white; }
-        .btn-green { background: #27ae60; color: white; width: 100%; margin-top: 20px; }
-        
-        button:disabled { background: #7f8c8d; cursor: not-allowed; opacity: 0.6; }
-        
-        .hidden { display: none; }
-        #info-status { margin-top: 15px; font-size: 0.85rem; color: #95a5a6; }
+        body { margin: 0; background: #1a1a1a; color: white; font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        #lobby { background: #2c3e50; padding: 30px; border-radius: 15px; text-align: center; width: 500px; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
+        input { padding: 12px; border-radius: 8px; border: none; width: 80%; margin-bottom: 15px; text-align: center; font-size: 1rem; }
+        button { padding: 12px 24px; border-radius: 8px; border: none; cursor: pointer; font-weight: bold; background: #3498db; color: white; margin: 5px; }
+        button:disabled { background: #7f8c8d; opacity: 0.6; }
+        .teams { display: flex; gap: 10px; margin-top: 20px; }
+        .team-box { flex: 1; background: #34495e; padding: 10px; border-radius: 10px; min-height: 100px; }
+        .hidden { display: none !important; }
+        .player-tag { background: rgba(0,0,0,0.2); padding: 5px; margin: 5px 0; border-radius: 4px; font-size: 0.9rem; }
     </style>
 </head>
 <body>
@@ -42,38 +21,151 @@
     <div id="lobby">
         <h1>STATU HUNT</h1>
 
-        <div id="step-pseudo">
-            <h3>BIENVENUE</h3>
-            <div class="input-group">
-                <input type="text" id="pseudoInput" placeholder="Ton pseudo (ex: Chasseur99)" maxlength="12">
-            </div>
-            <button onclick="confirmPseudo()" class="btn-blue">CONTINUER</button>
+        <div id="step-1">
+            <input type="text" id="pseudoInput" placeholder="Ton pseudo..." onkeydown="if(event.key==='Enter') confirmPseudo()">
+            <br>
+            <button onclick="confirmPseudo()">CONTINUER</button>
         </div>
 
-        <div id="step-menu" class="hidden">
-            <button onclick="createRoom()" class="btn-blue">CRÉER UNE SALLE</button>
-            <p style="margin:15px; color:#95a5a6;">— OU —</p>
-            <div class="input-group">
-                <input type="text" id="joinInput" placeholder="CODE DE PARTIE">
-            </div>
-            <button onclick="joinRoom()" class="btn-blue">REJOINDRE</button>
+        <div id="step-2" class="hidden">
+            <button onclick="createRoom()">CRÉER UNE SALLE</button>
+            <p>— OU —</p>
+            <input type="text" id="joinInput" placeholder="CODE DE PARTIE">
+            <br>
+            <button onclick="joinRoom()">REJOINDRE</button>
         </div>
 
-        <div id="step-room" class="hidden">
-            <p>CODE DE LA SALLE : <span id="displayCode" style="color:#f1c40f; font-size: 1.6rem; font-weight: bold;">---</span></p>
-            
-            <div class="teams-container">
-                <div class="team-box team-chercheur">
-                    <h3 id="labelSeekers">CHERCHEURS (0)</h3>
-                    <button onclick="selectTeam('seeker')" class="btn-blue">REJOINDRE</button>
-                    <div id="list-seekers" class="player-list"></div>
+        <div id="step-3" class="hidden">
+            <p>CODE : <span id="displayCode" style="color:#f1c40f; font-weight:bold;">---</span></p>
+            <div class="teams">
+                <div class="team-box">
+                    <button onclick="selectTeam('seeker')">CHERCHEURS</button>
+                    <div id="list-seekers"></div>
                 </div>
-                
-                <div class="team-box team-cache">
-                    <h3 id="labelHiders">CACHÉS (0)</h3>
-                    <button onclick="selectTeam('hider')" class="btn-red">REJOINDRE</button>
-                    <div id="list-hiders" class="player-list"></div>
+                <div class="team-box">
+                    <button onclick="selectTeam('hider')" style="background:#e74c3c">CACHÉS</button>
+                    <div id="list-hiders"></div>
                 </div>
             </div>
+            <p id="net-status" style="font-size:0.8rem; color:#95a5a6; margin-top:15px;">Prêt...</p>
+            <button id="startBtn" class="hidden" onclick="launchGame()" style="background:#27ae60; width:100%">LANCER</button>
+        </div>
+    </div>
 
-            <p id="info-status">Initialisation du réseau...</p>
+<script>
+    let myPseudo = "";
+    let myId = "";
+    let isHost = false;
+    let players = {};
+    let peer, conn;
+
+    // --- TRANSITION PSEUDO (Le correctif est ici) ---
+    function confirmPseudo() {
+        const input = document.getElementById('pseudoInput');
+        myPseudo = input.value.trim();
+        
+        if (myPseudo.length >= 2) {
+            console.log("Pseudo validé :", myPseudo);
+            document.getElementById('step-1').classList.add('hidden');
+            document.getElementById('step-2').classList.remove('hidden');
+        } else {
+            alert("Pseudo trop court !");
+        }
+    }
+
+    function createRoom() {
+        const code = Math.random().toString(36).substring(2, 7).toUpperCase();
+        isHost = true;
+        setupPeer('SH-' + code);
+        showStep3(code);
+        document.getElementById('startBtn').classList.remove('hidden');
+        // On s'ajoute localement
+        setTimeout(() => { addPlayer('host', myPseudo); }, 500);
+    }
+
+    function joinRoom() {
+        const code = document.getElementById('joinInput').value.toUpperCase().trim();
+        if(code.length < 5) return alert("Code invalide");
+        setupPeer();
+        setTimeout(() => {
+            conn = peer.connect('SH-' + code);
+            initConn(conn);
+        }, 800);
+        showStep3(code);
+    }
+
+    function setupPeer(id = null) {
+        peer = new Peer(id);
+        peer.on('open', (id) => { myId = id; });
+        peer.on('connection', (c) => {
+            conn = c;
+            initConn(c);
+            if(isHost) setTimeout(() => { c.send({type:'SYNC', players: players}); }, 1000);
+        });
+    }
+
+    function initConn(c) {
+        c.on('open', () => {
+            document.getElementById('net-status').innerText = "Connecté !";
+            c.send({type: 'JOIN', pseudo: myPseudo});
+        });
+        c.on('data', (data) => {
+            if(data.type === 'JOIN') {
+                addPlayer(c.peer, data.pseudo);
+                if(isHost) broadcast({type:'SYNC', players: players});
+            }
+            if(data.type === 'SYNC') {
+                players = data.players;
+                refreshUI();
+            }
+        });
+    }
+
+    function addPlayer(id, pseudo) {
+        players[id] = {pseudo: pseudo, team: null};
+        refreshUI();
+    }
+
+    function selectTeam(t) {
+        // En mode simple, on cherche notre entrée dans l'objet players
+        for(let id in players) {
+            if(players[id].pseudo === myPseudo) players[id].team = t;
+        }
+        refreshUI();
+        if(conn) conn.send({type:'SYNC', players: players});
+    }
+
+    function refreshUI() {
+        const sDiv = document.getElementById('list-seekers');
+        const hDiv = document.getElementById('list-hiders');
+        sDiv.innerHTML = ''; hDiv.innerHTML = '';
+        
+        let sCount = 0, hCount = 0;
+
+        for(let id in players) {
+            const p = players[id];
+            const div = document.createElement('div');
+            div.className = 'player-tag';
+            div.innerText = p.pseudo;
+            if(p.team === 'seeker') { sDiv.appendChild(div); sCount++; }
+            if(p.team === 'hider') { hDiv.appendChild(div); hCount++; }
+        }
+
+        if(isHost) {
+            const btn = document.getElementById('startBtn');
+            btn.disabled = !(sCount > 0 && hCount > 0);
+        }
+    }
+
+    function broadcast(data) { if(conn && conn.open) conn.send(data); }
+
+    function showStep3(code) {
+        document.getElementById('step-2').classList.add('hidden');
+        document.getElementById('step-3').classList.remove('hidden');
+        document.getElementById('displayCode').innerText = code;
+    }
+
+    function launchGame() { alert("Lancement du jeu !"); }
+</script>
+</body>
+</html>
