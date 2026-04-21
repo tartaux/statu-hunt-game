@@ -2,13 +2,12 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Statu Hunt - Final Gameplay</title>
+    <title>Statu Hunt - Final V3</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         body { margin: 0; background: #1a1a1a; color: white; font-family: 'Segoe UI', sans-serif; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; }
         #lobby { background: #2c3e50; padding: 30px; border-radius: 15px; text-align: center; width: 550px; box-shadow: 0 0 30px rgba(0,0,0,0.5); z-index: 100; }
-        .input-group { margin: 20px 0; }
-        input { padding: 12px; border-radius: 8px; border: none; width: 80%; text-align: center; font-size: 1rem; background: #1a1a1a; color: white; }
+        input { padding: 12px; border-radius: 8px; border: none; width: 80%; text-align: center; font-size: 1rem; background: #1a1a1a; color: white; margin-bottom: 10px; }
         button { padding: 12px 24px; border-radius: 8px; border: none; cursor: pointer; font-weight: bold; transition: 0.2s; margin: 5px; }
         .btn-blue { background: #3498db; color: white; }
         .btn-red { background: #e74c3c; color: white; }
@@ -63,8 +62,8 @@
     <canvas id="gameCanvas"></canvas>
 
 <script>
-    let myPseudo, myId, isHost = false, players = {}, peer, conn, gameActive = false;
-    let gameState = "PREP", timerVal = 20;
+    let myPseudo, myId, isHost = false, players = {}, peer, conn, gameActive = false, roomCode = "";
+    let gameState = "PREP", timerVal = 10;
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
     const mapW = 1500, mapH = 1200, keys = {}, statues = [];
@@ -85,17 +84,17 @@
     }
 
     function createRoom() {
-        const code = Math.random().toString(36).substring(2, 7).toUpperCase();
-        isHost = true; setupPeer('SH-' + code); showRoom(code);
+        roomCode = Math.random().toString(36).substring(2, 7).toUpperCase();
+        isHost = true; setupPeer('SH-' + roomCode); showRoom(roomCode);
         document.getElementById('startBtn').classList.remove('hidden');
         setTimeout(() => { players[myId] = {pseudo: myPseudo, team: null, x: 750, y: 600, angle: 0, fear: 0}; refreshUI(); }, 500);
     }
 
     function joinRoom() {
-        const code = document.getElementById('joinInput').value.toUpperCase().trim();
+        roomCode = document.getElementById('joinInput').value.toUpperCase().trim();
         setupPeer();
-        setTimeout(() => { conn = peer.connect('SH-' + code); initConn(conn); }, 800);
-        showRoom(code);
+        setTimeout(() => { conn = peer.connect('SH-' + roomCode); initConn(conn); }, 800);
+        showRoom(roomCode);
     }
 
     function setupPeer(id = null) {
@@ -156,15 +155,44 @@
 
     function requestStart() { if(isHost) { broadcast({type: 'START'}); startClientGame(); } }
 
+    // --- GENERATEUR DE MAP SYNCHRONISE ---
+    function generateMap(seedString) {
+        // Simple hash pour utiliser le code de salle comme graine (seed)
+        let seed = 0;
+        for (let i = 0; i < seedString.length; i++) seed += seedString.charCodeAt(i);
+        
+        const pseudoRandom = () => {
+            seed = (seed * 9301 + 49297) % 233280;
+            return seed / 233280;
+        };
+
+        for(let i=0; i<85; i++) {
+            let x, y, tooClose;
+            let attempts = 0;
+            do {
+                tooClose = false;
+                x = 60 + pseudoRandom() * (mapW - 120);
+                y = 60 + pseudoRandom() * (mapH - 120);
+                // Verifier distance avec autres statues
+                for(let s of statues) {
+                    let d = Math.sqrt((x-s.x)**2 + (y-s.y)**2);
+                    if(d < 45) tooClose = true;
+                }
+                attempts++;
+            } while(tooClose && attempts < 50);
+            statues.push({x, y});
+        }
+    }
+
     function startClientGame() {
         document.getElementById('lobby').style.display = 'none';
         document.getElementById('ui-game').style.display = 'block';
         canvas.style.display = 'block';
         canvas.width = window.innerWidth; canvas.height = window.innerHeight;
-        // Statues sécurisées à l'intérieur des bords
-        for(let i=0; i<80; i++) statues.push({x: 50 + Math.random()*(mapW-100), y: 50 + Math.random()*(mapH-100)});
-        gameActive = true; gameState = "PREP"; timerVal = 20;
-
+        
+        generateMap(roomCode);
+        
+        gameActive = true; gameState = "PREP"; timerVal = 10;
         const timerInterval = setInterval(() => {
             timerVal--;
             if(timerVal <= 0) {
@@ -200,7 +228,6 @@
         if(me.team === 'seeker') {
             const sCX = canvas.width/2, sCY = canvas.height/2;
             me.angle = Math.atan2(mousePos.y - sCY, mousePos.x - sCX);
-            // DETECTION DE COLLISION (Chercheur capture Caché)
             if(gameState === "HUNT") {
                 for(let id in players) {
                     let p = players[id];
@@ -217,7 +244,7 @@
         } else {
             document.getElementById('fear-ui').classList.remove('hidden');
             if(gameState === "HUNT") {
-                if(!moved) me.fear = Math.min(100, me.fear + 0.5); // Vitesse augmentée
+                if(!moved) me.fear = Math.min(100, me.fear + 0.5);
                 else me.fear = Math.max(0, me.fear - 0.7);
             }
             document.getElementById('fear-fill').style.width = me.fear + "%";
@@ -233,19 +260,33 @@
         ctx.save();
         ctx.translate(camX, camY);
         ctx.fillStyle = "#111"; ctx.fillRect(0,0, mapW, mapH);
+        
+        // Statues
         ctx.fillStyle = "#7f8c8d";
         statues.forEach(s => ctx.fillRect(s.x, s.y, 25, 25));
+
+        // Joueurs
         for(let id in players) {
             const p = players[id];
             if(p.team === 'hider') {
                 ctx.fillStyle = (p.fear > 85) ? "#e74c3c" : "#7f8c8d";
                 ctx.fillRect(p.x, p.y, 25, 25);
+                // ONCE DE PEUR (Sonar)
+                if(p.fear >= 100) {
+                    ctx.beginPath();
+                    ctx.arc(p.x + 12.5, p.y + 12.5, (Date.now() % 1000) / 4, 0, Math.PI * 2);
+                    ctx.strokeStyle = "rgba(231, 76, 60, 0.6)";
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                }
             } else if(p.team === 'seeker') {
                 ctx.fillStyle = "#3498db";
                 ctx.fillRect(p.x, p.y, 25, 25);
             }
         }
         ctx.restore();
+
+        // Masque de nuit & Lampe
         if(me.team === 'seeker') {
             ctx.save();
             ctx.fillStyle = "rgba(0,0,0,0.98)";
