@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Statu Hunt - Fear & Spectator</title>
+    <title>Statu Hunt - Fear Spam Mode</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         body { margin: 0; background: #0a0a0a; color: white; font-family: 'Segoe UI', sans-serif; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; }
@@ -99,6 +99,7 @@
     const waves = [];
     let lastShockwave = 0;
     let detectionArrows = [];
+    let fearSpamCounter = 0; // Pour cadencer le spam de l'onde
 
     function confirmPseudo() {
         myPseudo = document.getElementById('pseudoInput').value.trim();
@@ -292,7 +293,6 @@
 
         for(let i = waves.length - 1; i >= 0; i--) {
             let w = waves[i]; w.r += 12 * dt;
-            // Uniquement les ondes de type SEEKER déclenchent la détection
             if(w.owner === myId && me.team === 'seeker' && w.waveType === 'seeker') {
                 for(let id in players) {
                     let p = players[id];
@@ -332,13 +332,21 @@
                     }
                 }
             } else if(gameState === "HUNT") {
-                if(!moved) me.fear = Math.min(100, me.fear + 0.4 * dt); else me.fear = Math.max(0, me.fear - 1.2 * dt);
+                // Si on bouge, la peur descend. Sinon, elle monte.
+                if(!moved) me.fear = Math.min(100, me.fear + 0.4 * dt); 
+                else me.fear = Math.max(0, me.fear - 1.2 * dt);
                 
+                // SI JAUGE AU MAX : SPAM D'ONDES ROUGES
                 if(me.fear >= 100) {
-                    me.fear = 0;
-                    let waveData = {type: 'SHOCKWAVE', x: me.x + 12, y: me.y + 12, owner: myId, maxR: 150, waveType: 'fear'};
-                    waves.push({x: waveData.x, y: waveData.y, r: 0, maxR: 150, owner: myId, waveType: 'fear'});
-                    if(isHost) broadcast(waveData); else if(hostConn && hostConn.open) hostConn.send(waveData);
+                    fearSpamCounter += 1 * dt;
+                    if(fearSpamCounter >= 20) { // Environ toutes les 20 frames
+                        fearSpamCounter = 0;
+                        let waveData = {type: 'SHOCKWAVE', x: me.x + 12, y: me.y + 12, owner: myId, maxR: 150, waveType: 'fear'};
+                        waves.push({x: waveData.x, y: waveData.y, r: 0, maxR: 150, owner: myId, waveType: 'fear'});
+                        if(isHost) broadcast(waveData); else if(hostConn && hostConn.open) hostConn.send(waveData);
+                    }
+                } else {
+                    fearSpamCounter = 0;
                 }
             }
         }
@@ -361,11 +369,13 @@
         waves.forEach(w => {
             ctx.beginPath(); ctx.arc(w.x, w.y, w.r, 0, Math.PI * 2);
             if(w.waveType === 'fear') {
-                ctx.strokeStyle = `rgba(231, 76, 60, ${1 - w.r/w.maxR})`; // ROUGE pour la peur
+                ctx.strokeStyle = `rgba(231, 76, 60, ${1 - w.r/w.maxR})`; 
+                ctx.lineWidth = 10; // ONDE DE PEUR PLUS ÉPAISSE
             } else {
-                ctx.strokeStyle = `rgba(52, 152, 219, ${1 - w.r/w.maxR})`; // BLEU pour le chercheur
+                ctx.strokeStyle = `rgba(52, 152, 219, ${1 - w.r/w.maxR})`; 
+                ctx.lineWidth = 4; // ONDE CHERCHEUR NORMALE
             }
-            ctx.lineWidth = 4; ctx.stroke();
+            ctx.stroke();
         });
 
         for(let id in players) {
@@ -400,7 +410,7 @@
     function drawStatue(x, y, color, pulse, isSelf, moving, isGhost, fearValue) {
         ctx.save();
         if(!isGhost && fearValue > 50) {
-            let intensity = (fearValue - 50) / 15;
+            let intensity = (fearValue - 50) / 10; // Tremblement un peu plus fort
             x += (Math.random() - 0.5) * intensity; y += (Math.random() - 0.5) * intensity;
         }
         if(isGhost) {
