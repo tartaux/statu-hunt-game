@@ -2,18 +2,28 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Statu Hunt - Fix Lobby</title>
+    <title>Statu Hunt - Multiplayer Lobby</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         body { margin: 0; background: #1a1a1a; color: white; font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; }
         #lobby { background: #2c3e50; padding: 30px; border-radius: 15px; text-align: center; width: 500px; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
         input { padding: 12px; border-radius: 8px; border: none; width: 80%; margin-bottom: 15px; text-align: center; font-size: 1rem; }
-        button { padding: 12px 24px; border-radius: 8px; border: none; cursor: pointer; font-weight: bold; background: #3498db; color: white; margin: 5px; }
-        button:disabled { background: #7f8c8d; opacity: 0.6; }
-        .teams { display: flex; gap: 10px; margin-top: 20px; }
-        .team-box { flex: 1; background: #34495e; padding: 10px; border-radius: 10px; min-height: 100px; }
+        
+        /* Boutons */
+        button { padding: 12px 24px; border-radius: 8px; border: none; cursor: pointer; font-weight: bold; background: #3498db; color: white; margin: 5px; transition: 0.2s; }
+        button:hover { filter: brightness(1.1); }
+        button:disabled { background: #7f8c8d; opacity: 0.6; cursor: not-allowed; }
+        
+        .btn-copy { background: #95a5a6; padding: 5px 10px; font-size: 0.8rem; margin-left: 10px; }
+        .btn-start { background: #27ae60; width: 100%; margin-top: 20px; font-size: 1.1rem; }
+        
+        /* Salon et Equipes */
+        .teams { display: flex; gap: 15px; margin-top: 20px; }
+        .team-box { flex: 1; background: #34495e; padding: 10px; border-radius: 10px; min-height: 120px; border: 1px solid #2c3e50; }
+        .player-tag { background: rgba(0,0,0,0.2); padding: 8px; margin: 5px 0; border-radius: 6px; font-size: 0.9rem; border-left: 3px solid #f1c40f; text-align: left; }
+        
         .hidden { display: none !important; }
-        .player-tag { background: rgba(0,0,0,0.2); padding: 5px; margin: 5px 0; border-radius: 4px; font-size: 0.9rem; }
+        #code-container { background: rgba(0,0,0,0.3); padding: 10px; border-radius: 8px; display: inline-flex; align-items: center; margin-bottom: 15px; }
     </style>
 </head>
 <body>
@@ -22,33 +32,42 @@
         <h1>STATU HUNT</h1>
 
         <div id="step-1">
-            <input type="text" id="pseudoInput" placeholder="Ton pseudo..." onkeydown="if(event.key==='Enter') confirmPseudo()">
+            <h3>CHOISIS TON PSEUDO</h3>
+            <input type="text" id="pseudoInput" placeholder="Ton nom de joueur..." onkeydown="if(event.key==='Enter') confirmPseudo()">
             <br>
             <button onclick="confirmPseudo()">CONTINUER</button>
         </div>
 
         <div id="step-2" class="hidden">
             <button onclick="createRoom()">CRÉER UNE SALLE</button>
-            <p>— OU —</p>
-            <input type="text" id="joinInput" placeholder="CODE DE PARTIE">
+            <p style="color:#95a5a6;">— OU —</p>
+            <input type="text" id="joinInput" placeholder="ENTRER UN CODE">
             <br>
             <button onclick="joinRoom()">REJOINDRE</button>
         </div>
 
         <div id="step-3" class="hidden">
-            <p>CODE : <span id="displayCode" style="color:#f1c40f; font-weight:bold;">---</span></p>
+            <div id="code-container">
+                CODE : <span id="displayCode" style="color:#f1c40f; font-weight:bold; font-size:1.4rem; margin-left:10px;">---</span>
+                <button id="copyBtn" class="btn-copy" onclick="copyCode()">COPIER 📋</button>
+            </div>
+
             <div class="teams">
                 <div class="team-box">
-                    <button onclick="selectTeam('seeker')">CHERCHEURS</button>
+                    <h4 style="color:#3498db; margin-top:0;">CHERCHEURS</h4>
+                    <button onclick="selectTeam('seeker')" style="font-size:0.8rem;">REJOINDRE</button>
                     <div id="list-seekers"></div>
                 </div>
                 <div class="team-box">
-                    <button onclick="selectTeam('hider')" style="background:#e74c3c">CACHÉS</button>
+                    <h4 style="color:#e74c3c; margin-top:0;">CACHÉS</h4>
+                    <button onclick="selectTeam('hider')" style="background:#e74c3c; font-size:0.8rem;">REJOINDRE</button>
                     <div id="list-hiders"></div>
                 </div>
             </div>
-            <p id="net-status" style="font-size:0.8rem; color:#95a5a6; margin-top:15px;">Prêt...</p>
-            <button id="startBtn" class="hidden" onclick="launchGame()" style="background:#27ae60; width:100%">LANCER</button>
+
+            <p id="net-status" style="font-size:0.8rem; color:#95a5a6; margin-top:15px;">📡 Réseau prêt...</p>
+            
+            <button id="startBtn" class="hidden btn-start" onclick="launchGame()" disabled>ATTENTE DES ÉQUIPES...</button>
         </div>
     </div>
 
@@ -59,27 +78,25 @@
     let players = {};
     let peer, conn;
 
-    // --- TRANSITION PSEUDO (Le correctif est ici) ---
+    // --- ÉTAPE 1 : VALIDATION PSEUDO ---
     function confirmPseudo() {
         const input = document.getElementById('pseudoInput');
         myPseudo = input.value.trim();
-        
         if (myPseudo.length >= 2) {
-            console.log("Pseudo validé :", myPseudo);
             document.getElementById('step-1').classList.add('hidden');
             document.getElementById('step-2').classList.remove('hidden');
         } else {
-            alert("Pseudo trop court !");
+            alert("Pseudo trop court (mini 2 caractères) !");
         }
     }
 
+    // --- ÉTAPE 2 : CRÉATION / REJOINDRE ---
     function createRoom() {
         const code = Math.random().toString(36).substring(2, 7).toUpperCase();
         isHost = true;
         setupPeer('SH-' + code);
         showStep3(code);
         document.getElementById('startBtn').classList.remove('hidden');
-        // On s'ajoute localement
         setTimeout(() => { addPlayer('host', myPseudo); }, 500);
     }
 
@@ -94,6 +111,21 @@
         showStep3(code);
     }
 
+    // --- FONCTION COPIER LE CODE ---
+    function copyCode() {
+        const code = document.getElementById('displayCode').innerText;
+        navigator.clipboard.writeText(code).then(() => {
+            const btn = document.getElementById('copyBtn');
+            btn.innerText = "COPIÉ ! ✅";
+            btn.style.background = "#27ae60";
+            setTimeout(() => {
+                btn.innerText = "COPIER 📋";
+                btn.style.background = "#95a5a6";
+            }, 2000);
+        });
+    }
+
+    // --- RÉSEAU ---
     function setupPeer(id = null) {
         peer = new Peer(id);
         peer.on('open', (id) => { myId = id; });
@@ -106,7 +138,7 @@
 
     function initConn(c) {
         c.on('open', () => {
-            document.getElementById('net-status').innerText = "Connecté !";
+            document.getElementById('net-status').innerText = "✅ Connecté au salon";
             c.send({type: 'JOIN', pseudo: myPseudo});
         });
         c.on('data', (data) => {
@@ -121,13 +153,13 @@
         });
     }
 
+    // --- LOGIQUE DE JEU & UI ---
     function addPlayer(id, pseudo) {
         players[id] = {pseudo: pseudo, team: null};
         refreshUI();
     }
 
     function selectTeam(t) {
-        // En mode simple, on cherche notre entrée dans l'objet players
         for(let id in players) {
             if(players[id].pseudo === myPseudo) players[id].team = t;
         }
@@ -146,14 +178,16 @@
             const p = players[id];
             const div = document.createElement('div');
             div.className = 'player-tag';
-            div.innerText = p.pseudo;
+            div.innerText = p.pseudo + (p.pseudo === myPseudo ? " (Moi)" : "");
             if(p.team === 'seeker') { sDiv.appendChild(div); sCount++; }
             if(p.team === 'hider') { hDiv.appendChild(div); hCount++; }
         }
 
         if(isHost) {
             const btn = document.getElementById('startBtn');
-            btn.disabled = !(sCount > 0 && hCount > 0);
+            const ready = (sCount > 0 && hCount > 0);
+            btn.disabled = !ready;
+            btn.innerText = ready ? "LANCER LA PARTIE" : "ÉQUIPES INCOMPLÈTES...";
         }
     }
 
@@ -165,7 +199,9 @@
         document.getElementById('displayCode').innerText = code;
     }
 
-    function launchGame() { alert("Lancement du jeu !"); }
+    function launchGame() { 
+        alert("C'est parti ! Tout le monde est prêt."); 
+    }
 </script>
 </body>
 </html>
