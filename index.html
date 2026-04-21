@@ -179,10 +179,9 @@
             }
             if(data.type === 'POS') { if(players[data.id]) players[data.id] = {...players[data.id], ...data}; }
             
-            if(data.type === 'SHOCKWAVE') { waves.push({x: data.x, y: data.y, r: 0, maxR: 450, owner: data.owner}); }
+            if(data.type === 'SHOCKWAVE') { waves.push({x: data.x, y: data.y, r: 0, maxR: 630, owner: data.owner}); }
             if(data.type === 'FEAR_HIT' && data.targetId === myId) { players[myId].fear = Math.min(100, players[myId].fear + data.amount); }
             if(data.type === 'PING_BACK' && data.seekerId === myId) {
-                // Le chasseur reçoit l'angle vers la cible
                 detectionArrows.push({angle: data.angle, life: 60});
             }
         });
@@ -289,12 +288,10 @@
         me.x = Math.max(15, Math.min(mapW - 35, me.x));
         me.y = Math.max(15, Math.min(mapH - 35, me.y));
 
-        // Update des ondes de radar
         for(let i = waves.length - 1; i >= 0; i--) {
             let w = waves[i];
             w.r += 12 * dt;
             
-            // Si c'est l'onde que j'ai lancée (je suis chercheur)
             if(w.owner === myId && me.team === 'seeker') {
                 for(let id in players) {
                     let p = players[id];
@@ -302,9 +299,7 @@
                         let dist = Math.sqrt((w.x - (p.x+12))**2 + (w.y - (p.y+12))**2);
                         if(Math.abs(dist - w.r) < 20) {
                             w['hit_'+id] = true;
-                            // Envoi du malus de peur
                             broadcast({type: 'FEAR_HIT', targetId: id, amount: 15});
-                            // Calcul de l'angle pour la flèche d'indice
                             let angleToTarget = Math.atan2((p.y+12) - (me.y+12), (p.x+12) - (me.x+12));
                             detectionArrows.push({angle: angleToTarget, life: 60});
                         }
@@ -314,7 +309,6 @@
             if(w.r > w.maxR) waves.splice(i, 1);
         }
 
-        // Update de la durée de vie des flèches d'indice
         for(let i = detectionArrows.length - 1; i >= 0; i--) {
             detectionArrows[i].life -= 1 * dt;
             if(detectionArrows[i].life <= 0) detectionArrows.splice(i, 1);
@@ -349,13 +343,10 @@
         const camX = -me.x + canvas.width/2, camY = -me.y + canvas.height/2;
         
         ctx.save(); ctx.translate(camX, camY);
-        
         ctx.strokeStyle = "#f1c40f"; ctx.lineWidth = 10; ctx.strokeRect(0,0, mapW, mapH);
         ctx.fillStyle = "#111"; ctx.fillRect(0,0, mapW, mapH);
-        
         statues.forEach(s => drawStatue(s.x, s.y, "#555", false, false));
 
-        // Dessin des ondes radar
         waves.forEach(w => {
             ctx.beginPath();
             ctx.arc(w.x, w.y, w.r, 0, Math.PI * 2);
@@ -377,7 +368,6 @@
 
         drawLighting(me);
 
-        // Dessin des flèches d'indice (Radar) pour le chasseur
         if(me.team === 'seeker') {
             detectionArrows.forEach(arr => {
                 ctx.save();
@@ -385,7 +375,8 @@
                 ctx.rotate(arr.angle);
                 ctx.fillStyle = `rgba(241, 196, 15, ${arr.life / 60})`;
                 ctx.beginPath();
-                ctx.moveTo(60, 0); ctx.lineTo(45, -10); ctx.lineTo(45, 10); ctx.closePath();
+                // Flèche agrandie de 40% (60*1.4=84, 45*1.4=63, 10*1.4=14)
+                ctx.moveTo(84, 0); ctx.lineTo(63, -14); ctx.lineTo(63, 14); ctx.closePath();
                 ctx.fill();
                 ctx.restore();
             });
@@ -438,17 +429,14 @@
     function generateMap(s) {
         let seed = 0; for(let i=0; i<s.length; i++) seed += s.charCodeAt(i);
         const pseudoRand = () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; };
-        
         statues.length = 0;
         let targetStatues = 180;
         if(mapSizeKey === 'M') targetStatues = 360;
         if(mapSizeKey === 'L') targetStatues = 540;
-
         let attempts = 0;
         while(statues.length < targetStatues && attempts < 8000) {
             let x = 100 + pseudoRand() * (mapW - 200);
             let y = 100 + pseudoRand() * (mapH - 200);
-            
             let tooClose = false;
             for(let st of statues) {
                 let d = Math.sqrt((x-st.x)**2 + (y-st.y)**2);
@@ -470,17 +458,14 @@
     function requestBackToLobby() { if(isHost) { broadcast({type: 'BACK_LOBBY'}); resetToLobby(); } }
     
     function resetToLobby() { 
-        gameActive = false; 
-        clearInterval(logicInterval); 
-        clearInterval(masterTimer);
+        gameActive = false; clearInterval(logicInterval); clearInterval(masterTimer);
         canvas.style.display = 'none'; 
         document.getElementById('end-screen').style.display = 'none'; 
         document.getElementById('lobby').style.display = 'block'; 
         waves.length = 0; detectionArrows.length = 0;
         for(let id in players) { players[id].fear = 0; }
         document.getElementById('fear-fill').style.width = "0%";
-        updateTimerDisplay();
-        refreshUI(); 
+        updateTimerDisplay(); refreshUI(); 
     }
 
     function requestStart() { if(isHost) { randomizeSpawns(); broadcast({type: 'START', players: players}); startClientGame(); } }
@@ -493,10 +478,10 @@
         const me = players[myId];
         if(gameActive && gameState === "HUNT" && me.team === 'seeker' && e.button === 0) {
             let now = Date.now();
-            if(now - lastShockwave > 4000) { // Cooldown 4s
+            if(now - lastShockwave > 4000) {
                 lastShockwave = now;
                 let waveData = {type: 'SHOCKWAVE', x: me.x + 12, y: me.y + 12, owner: myId};
-                waves.push({x: waveData.x, y: waveData.y, r: 0, maxR: 450, owner: myId});
+                waves.push({x: waveData.x, y: waveData.y, r: 0, maxR: 630, owner: myId});
                 broadcast(waveData);
             }
         }
