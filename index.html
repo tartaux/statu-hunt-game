@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Statu Hunt - Blind Prep Edition</title>
+    <title>Statu Hunt - Tactical Vision</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         body { margin: 0; background: #0a0a0a; color: white; font-family: 'Segoe UI', sans-serif; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; }
@@ -156,11 +156,7 @@
             }
             if(data.type === 'SYNC') { players = data.players; refreshUI(); }
             if(data.type === 'SYNC_TIMER') { gameDuration = data.duration; initialDuration = data.duration; updateTimerDisplay(); }
-            if(data.type === 'START') { 
-                // Pour les clients, on met à jour les positions de spawn reçues du host
-                players = data.players;
-                startClientGame(); 
-            }
+            if(data.type === 'START') { players = data.players; startClientGame(); }
             if(data.type === 'END') showEndScreen(data.winner, data.reason);
             if(data.type === 'BACK_LOBBY') resetToLobby();
             if(data.type === 'POS') { if(players[data.id]) players[data.id] = {...players[data.id], ...data}; }
@@ -224,22 +220,16 @@
         document.getElementById('displayCode').innerText = code;
     }
 
-    // --- LOGIQUE DE SPAWN RANDOM ---
     function randomizeSpawns() {
         if(!isHost) return;
-        
-        // Spawn des chercheurs
         let sX = 200 + Math.random() * (mapW - 400);
         let sY = 200 + Math.random() * (mapH - 400);
-
-        // Spawn des cachés (min 800px de distance)
         let hX, hY, dist;
         do {
             hX = 200 + Math.random() * (mapW - 400);
             hY = 200 + Math.random() * (mapH - 400);
             dist = Math.sqrt((sX - hX)**2 + (sY - hY)**2);
         } while (dist < 800);
-
         for(let id in players) {
             if(players[id].team === 'seeker') { players[id].x = sX; players[id].y = sY; }
             else { players[id].x = hX; players[id].y = hY; }
@@ -338,16 +328,10 @@
             const p = players[id];
             if(p.team === 'hider') {
                 let isMe = (id === myId);
-                let fearLevel = p.fear;
-                let color = "#555";
-                let pulse = (fearLevel >= 100);
-                let shake = (fearLevel > 80);
-
-                if(isMe || me.team !== 'seeker') {
-                    if(fearLevel > 80) color = "#962d22";
-                }
-
-                let ox = (shake) ? (Math.random()*2-1) : 0;
+                let color = (isMe || me.team !== 'seeker') && p.fear > 80 ? "#962d22" : "#555";
+                let pulse = (p.fear >= 100);
+                let shake = (p.fear > 80);
+                let ox = shake ? (Math.random()*2-1) : 0;
                 drawStatue(p.x + ox, p.y, color, pulse, isMe);
             } else if(p.team === 'seeker') {
                 drawSeeker(p);
@@ -355,6 +339,7 @@
         }
         ctx.restore();
 
+        // ÉCLAIRAGE (C'est ici que la magie opère pour les cachés)
         drawLighting(me);
 
         if(me.team === 'hider') {
@@ -388,25 +373,50 @@
 
     function drawLighting(me) {
         ctx.save();
+        const camX = -me.x + canvas.width/2, camY = -me.y + canvas.height/2;
+
         if(me.team === 'seeker') {
+            // VISION CHASSEUR : Noir opaque sauf cône
             let cx = canvas.width/2 + 12, cy = canvas.height/2 + 12;
-            ctx.fillStyle = "rgba(0,0,0,1)"; // Noir opaque total
+            ctx.fillStyle = "rgba(0,0,0,1)";
             ctx.beginPath(); ctx.rect(0,0, canvas.width, canvas.height);
-            
             if(gameState === "HUNT") {
                 ctx.moveTo(cx, cy);
                 ctx.arc(cx, cy, 500, me.angle-0.55, me.angle+0.55);
                 ctx.fill("evenodd");
             } else {
-                // Phase PREP : Noir complet pour le chercheur
                 ctx.fill();
                 ctx.fillStyle = "white"; ctx.textAlign = "center"; ctx.font = "20px Arial";
                 ctx.fillText("VOUS ÊTES AVEUGLE... LES STATUES SE CACHENT.", canvas.width/2, canvas.height/2);
             }
         } else {
+            // VISION CACHÉ : Vignettage ambiant + LAMPE DU CHASSEUR
             let grd = ctx.createRadialGradient(canvas.width/2, canvas.height/2, 100, canvas.width/2, canvas.height/2, canvas.width/1.1);
             grd.addColorStop(0, "transparent"); grd.addColorStop(1, "rgba(0,0,0,0.85)");
             ctx.fillStyle = grd; ctx.fillRect(0,0, canvas.width, canvas.height);
+
+            // DESSINER LA LAMPE DU CHASSEUR SUR L'ÉCRAN DU CACHÉ
+            if(gameState === "HUNT") {
+                for(let id in players) {
+                    let p = players[id];
+                    if(p.team === 'seeker') {
+                        ctx.save();
+                        ctx.translate(camX + p.x + 12, camY + p.y + 12);
+                        ctx.rotate(p.angle);
+                        
+                        let beam = ctx.createRadialGradient(0, 0, 50, 0, 0, 500);
+                        beam.addColorStop(0, "rgba(255, 255, 200, 0.2)");
+                        beam.addColorStop(1, "transparent");
+                        
+                        ctx.fillStyle = beam;
+                        ctx.beginPath();
+                        ctx.moveTo(0,0);
+                        ctx.arc(0, 0, 500, -0.55, 0.55);
+                        ctx.fill();
+                        ctx.restore();
+                    }
+                }
+            }
         }
         ctx.restore();
     }
@@ -456,8 +466,8 @@
     
     function requestStart() { 
         if(isHost) { 
-            randomizeSpawns(); // Le host calcule les positions
-            broadcast({type: 'START', players: players}); // Envoie les positions à tout le monde
+            randomizeSpawns();
+            broadcast({type: 'START', players: players});
             startClientGame(); 
         } 
     }
