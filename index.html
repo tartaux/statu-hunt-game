@@ -2,128 +2,193 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Statu Hunt - Multiplayer Lobby</title>
+    <title>Statu Hunt - Lobby Pro</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
-        body { margin: 0; background: #1a1a1a; color: white; font-family: 'Segoe UI', sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; }
-        #lobby { background: #2c3e50; padding: 30px; border-radius: 15px; text-align: center; box-shadow: 0 0 20px rgba(0,0,0,0.5); z-index: 100; }
-        input { padding: 10px; border-radius: 5px; border: none; margin: 10px; width: 150px; text-align: center; font-size: 1.2rem; }
-        button { padding: 10px 20px; border-radius: 5px; border: none; cursor: pointer; background: #3498db; color: white; font-weight: bold; transition: 0.3s; }
-        button:hover { background: #2980b9; transform: scale(1.05); }
+        body { margin: 0; background: #1a1a1a; color: white; font-family: 'Segoe UI', sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        #lobby { background: #2c3e50; padding: 30px; border-radius: 15px; text-align: center; width: 600px; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
+        
+        .input-group { margin: 15px 0; }
+        input { padding: 10px; border-radius: 5px; border: none; text-align: center; font-size: 1rem; width: 80%; }
+        
+        .teams-container { display: flex; justify-content: space-between; margin-top: 20px; gap: 20px; }
+        .team-box { flex: 1; background: #34495e; padding: 15px; border-radius: 10px; min-height: 150px; }
+        .team-chercheur { border-top: 5px solid #3498db; }
+        .team-cache { border-top: 5px solid #e74c3c; }
+        
+        .player-name { background: rgba(255,255,255,0.1); margin: 5px 0; padding: 5px; border-radius: 3px; font-size: 0.9rem; }
+        
+        button { padding: 10px 20px; border-radius: 5px; border: none; cursor: pointer; background: #3498db; color: white; font-weight: bold; transition: 0.2s; margin: 5px; }
+        button:hover { transform: scale(1.05); filter: brightness(1.1); }
+        .btn-red { background: #e74c3c; }
+        .btn-green { background: #27ae60; }
         .hidden { display: none; }
-        #status-ui { position: absolute; top: 10px; left: 10px; pointer-events: none; }
-        canvas { display: none; background: #000; }
     </style>
 </head>
 <body>
 
     <div id="lobby">
         <h1>STATU HUNT</h1>
-        <div id="menu-initial">
+
+        <div id="step-pseudo">
+            <div class="input-group">
+                <input type="text" id="pseudoInput" placeholder="Entre ton pseudo..." maxlength="12">
+            </div>
+            <button onclick="confirmPseudo()" class="btn-green">VALIDER</button>
+        </div>
+
+        <div id="step-menu" class="hidden">
             <button onclick="createRoom()">CRÉER UNE PARTIE</button>
             <p>OU</p>
-            <input type="text" id="joinInput" placeholder="CODE DE PARTIE">
+            <div class="input-group">
+                <input type="text" id="joinInput" placeholder="CODE DE PARTIE">
+            </div>
             <button onclick="joinRoom()">REJOINDRE</button>
         </div>
 
-        <div id="room-info" class="hidden">
-            <p>CODE DE LA PARTIE : <b id="displayCode" style="color:#f1c40f; font-size: 1.5rem;">---</b></p>
-            <div style="margin: 20px;">
-                <button onclick="selectTeam('seeker')" id="btnSeeker" style="background:#3498db">REJOINDRE CHERCHEURS (0)</button>
-                <button onclick="selectTeam('hider')" id="btnHider" style="background:#e74c3c">REJOINDRE CACHÉS (0)</button>
+        <div id="step-room" class="hidden">
+            <p>CODE : <b id="displayCode" style="color:#f1c40f; font-size: 1.5rem;">---</b></p>
+            
+            <div class="teams-container">
+                <div class="team-box team-chercheur">
+                    <button onclick="selectTeam('seeker')">REJOINDRE</button>
+                    <h3>CHERCHEURS</h3>
+                    <div id="list-seekers"></div>
+                </div>
+                <div class="team-box team-cache">
+                    <button onclick="selectTeam('hider')" class="btn-red">REJOINDRE</button>
+                    <h3>CACHÉS</h3>
+                    <div id="list-hiders"></div>
+                </div>
             </div>
-            <p id="playerCount">En attente de joueurs...</p>
-            <button id="startBtn" class="hidden" style="background:#27ae60" onclick="launchGame()">LANCER LA PARTIE</button>
+
+            <p id="info-status" style="margin-top:20px; color: #bdc3c7;">En attente de connexion...</p>
+            <button id="startBtn" class="hidden btn-green" onclick="launchGame()">LANCER LA PARTIE</button>
         </div>
     </div>
 
-    <div id="status-ui" class="hidden">
-        <div id="gameTimer">PRÉPARATION...</div>
-        <div style="width:200px; height:10px; background:#333; margin-top:5px;"><div id="fear-fill" style="width:0%; height:100%; background:#e74c3c;"></div></div>
-    </div>
-    <canvas id="gameCanvas"></canvas>
-
 <script>
-    // --- CONFIGURATION RÉSEAU ---
-    let peer;
-    let conn;
-    let myId;
+    let peer, conn, myId, myPseudo;
     let isHost = false;
-    let players = {}; // Liste des joueurs connectés
-    let myTeam = null;
+    let players = {}; // {id: {pseudo: "nom", team: "hider/seeker"}}
 
-    // Fonction pour créer une partie
-    function createRoom() {
-        const roomCode = Math.random().toString(36).substring(2, 7).toUpperCase();
-        initPeer(roomCode);
-        isHost = true;
-        showRoom(roomCode);
-        document.getElementById('startBtn').classList.remove('hidden');
+    function confirmPseudo() {
+        myPseudo = document.getElementById('pseudoInput').value.trim();
+        if(myPseudo.length < 2) return alert("Pseudo trop court !");
+        document.getElementById('step-pseudo').classList.add('hidden');
+        document.getElementById('step-menu').classList.remove('hidden');
     }
 
-    // Fonction pour rejoindre
+    function createRoom() {
+        const roomCode = Math.random().toString(36).substring(2, 7).toUpperCase();
+        isHost = true;
+        initPeer('SH-' + roomCode);
+        showRoom(roomCode);
+        document.getElementById('startBtn').classList.remove('hidden');
+        // L'hôte s'ajoute lui-même
+        setTimeout(() => {
+            addPlayer(myId, myPseudo);
+        }, 500);
+    }
+
     function joinRoom() {
         const code = document.getElementById('joinInput').value.toUpperCase();
         if(code.length < 5) return alert("Code invalide");
         initPeer();
         setTimeout(() => {
             conn = peer.connect('SH-' + code);
-            setupConn();
-        }, 1000);
+            setupConnection(conn);
+        }, 800);
         showRoom(code);
     }
 
     function initPeer(id = null) {
-        // SH- pour éviter les conflits de noms sur le serveur PeerJS
-        peer = new Peer(id ? 'SH-' + id : undefined);
+        peer = new Peer(id);
+        peer.on('open', (id) => { myId = id; console.log("Mon ID:", myId); });
         
-        peer.on('open', (newId) => {
-            myId = newId;
-            console.log("Mon ID réseau : " + myId);
-        });
-
         peer.on('connection', (c) => {
-            conn = c;
-            setupConn();
-            // L'hôte envoie la liste des joueurs ici (à dev dans l'étape suivante)
+            setupConnection(c);
+            // Si je suis l'hôte, j'envoie la liste actuelle au nouveau
+            if(isHost) {
+                setTimeout(() => {
+                    c.send({type: 'SYNC_ALL', players: players});
+                }, 1000);
+            }
         });
     }
 
-    function setupConn() {
+    function setupConnection(c) {
+        conn = c;
         conn.on('open', () => {
-            console.log("Connecté !");
-            document.getElementById('playerCount').innerText = "Connecté au salon !";
+            document.getElementById('info-status').innerText = "Connecté au serveur !";
+            // Envoyer mon pseudo à l'autre
+            conn.send({type: 'JOIN', pseudo: myPseudo, id: myId});
         });
+
         conn.on('data', (data) => {
-            // Ici on recevra les positions des autres joueurs
-            console.log("Données reçues:", data);
+            if(data.type === 'JOIN') {
+                addPlayer(data.id, data.pseudo);
+                if(isHost) broadcast({type: 'SYNC_ALL', players: players});
+            }
+            if(data.type === 'SYNC_ALL') {
+                players = data.players;
+                updateLobbyUI();
+            }
+            if(data.type === 'TEAM_CHANGE') {
+                if(players[data.id]) {
+                    players[data.id].team = data.team;
+                    updateLobbyUI();
+                    if(isHost) broadcast({type: 'SYNC_ALL', players: players});
+                }
+            }
         });
     }
 
-    function showRoom(code) {
-        document.getElementById('menu-initial').classList.add('hidden');
-        document.getElementById('room-info').classList.remove('hidden');
-        document.getElementById('displayCode').innerText = code;
+    function addPlayer(id, pseudo) {
+        players[id] = {pseudo: pseudo, team: null};
+        updateLobbyUI();
     }
 
-    function selectTeam(team) {
-        myTeam = team;
-        alert("Tu as rejoint l'équipe : " + (team === 'seeker' ? 'Chercheur' : 'Caché'));
-        // Envoyer l'info au réseau
-        if(conn && conn.open) conn.send({type: 'TEAM_SELECT', team: team, id: myId});
+    function selectTeam(teamName) {
+        if(!players[myId]) return;
+        players[myId].team = teamName;
+        updateLobbyUI();
+        // Prévenir les autres
+        if(conn) conn.send({type: 'TEAM_CHANGE', id: myId, team: teamName});
     }
 
-    function launchGame() {
-        // Envoi du signal de départ à tout le monde
-        if(isHost) {
-            // On cachera le lobby et on affichera le canvas
-            // Pour l'instant on simule le lancement
-            alert("Lancement du jeu (La synchronisation des positions arrive à l'étape suivante !)");
+    function updateLobbyUI() {
+        const listSeekers = document.getElementById('list-seekers');
+        const listHiders = document.getElementById('list-hiders');
+        listSeekers.innerHTML = '';
+        listHiders.innerHTML = '';
+
+        for(let id in players) {
+            const p = players[id];
+            const el = document.createElement('div');
+            el.className = 'player-name';
+            el.innerText = p.pseudo + (id === myId ? " (Moi)" : "");
+            
+            if(p.team === 'seeker') listSeekers.appendChild(el);
+            if(p.team === 'hider') listHiders.appendChild(el);
         }
     }
 
-    // --- ICI LE CODE DE TON JEU (INDEX.HTML PRÉCÉDENT) ---
-    // On l'activera une fois la connexion validée !
+    function broadcast(data) {
+        // Dans PeerJS simple, on ne peut broadcast que si on a gardé toutes les connexions.
+        // Pour ce proto, l'hôte renvoie l'info au dernier connecté.
+        if(conn && conn.open) conn.send(data);
+    }
+
+    function showRoom(code) {
+        document.getElementById('step-menu').classList.add('hidden');
+        document.getElementById('step-room').classList.remove('hidden');
+        document.getElementById('displayCode').innerText = code;
+    }
+
+    function launchGame() {
+        alert("Lancement... Les joueurs sont prêts !");
+    }
 </script>
 </body>
 </html>
