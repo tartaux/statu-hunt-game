@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Statu Hunt - Fixed Collisions</title>
+    <title>Statu Hunt - Copy Fix</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         body { margin: 0; background: #0a0a0a; color: white; font-family: 'Segoe UI', sans-serif; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; }
@@ -13,9 +13,8 @@
         .btn-blue { background: #3498db; color: white; box-shadow: 0 4px #2980b9; }
         .btn-red { background: #e74c3c; color: white; box-shadow: 0 4px #c0392b; }
         .btn-green { background: #27ae60; color: white; width: 100%; margin-top: 15px; font-size: 1.1rem; box-shadow: 0 4px #1e8449; }
-        button:disabled { background: #7f8c8d; cursor: not-allowed; opacity: 0.5; }
         .config-box { background: rgba(0,0,0,0.3); padding: 15px; border-radius: 8px; margin: 15px 0; }
-        .teams, .end-teams { display: flex; gap: 15px; margin-top: 20px; }
+        .teams { display: flex; gap: 15px; margin-top: 20px; }
         .team-box { flex: 1; background: #1a252f; padding: 10px; border-radius: 10px; min-height: 150px; border: 1px solid #34495e; }
         .player-tag { background: rgba(52, 152, 219, 0.1); padding: 8px; margin: 5px 0; border-radius: 6px; font-size: 0.9rem; border-left: 4px solid #f1c40f; text-align: left; }
         canvas { position: absolute; top: 0; left: 0; display: none; background: #000; }
@@ -30,34 +29,38 @@
 <body>
 
     <div id="lobby">
-        <h1 style="color: #f1c40f;">STATU HUNT</h1>
+        <h1 style="color: #f1c40f; letter-spacing: 3px;">STATU HUNT</h1>
         <div id="step-pseudo">
             <input type="text" id="pseudoInput" placeholder="NOM DU JOUEUR..." maxlength="15">
             <br><button class="btn-blue" onclick="confirmPseudo()">REJOINDRE</button>
         </div>
         <div id="step-menu" class="hidden">
-            <button class="btn-blue" onclick="createRoom()">CRÉER</button>
+            <button class="btn-blue" onclick="createRoom()">CRÉER SALLE</button>
+            <p>— OU —</p>
             <input type="text" id="joinInput" placeholder="CODE">
-            <button class="btn-blue" onclick="joinRoom()">REJOINDRE</button>
+            <br><button class="btn-blue" onclick="joinRoom()">REJOINDRE SALLE</button>
         </div>
         <div id="step-room" class="hidden">
-            <p>CODE : <span id="displayCode" style="color:#f1c40f;">---</span></p>
+            <div style="background: rgba(0,0,0,0.3); padding: 10px; border-radius: 8px;">
+                CODE : <span id="displayCode" style="color:#f1c40f; font-weight: bold; font-size: 1.2rem;">---</span>
+                <button id="copyBtn" class="btn-blue" style="font-size: 0.7rem; padding: 5px 10px; margin-left: 10px;" onclick="copyCode()">COPIER</button>
+            </div>
             <div class="config-box">
-                TEMPS : <button class="btn-blue" onclick="changeTimer(-30)">-</button>
-                <span id="timerSetting">2:00</span>
+                DURÉE : <button class="btn-blue" onclick="changeTimer(-30)">-</button>
+                <span id="timerSetting" style="margin: 0 10px; font-weight: bold;">2:00</span>
                 <button class="btn-blue" onclick="changeTimer(30)">+</button>
             </div>
             <div class="teams">
-                <div class="team-box"><h4>CHERCHEURS</h4><button onclick="selectTeam('seeker')" class="btn-blue">GO</button><div id="list-seekers"></div></div>
-                <div class="team-box"><h4>CACHÉS</h4><button onclick="selectTeam('hider')" class="btn-red">GO</button><div id="list-hiders"></div></div>
+                <div class="team-box"><h4>CHERCHEURS</h4><button onclick="selectTeam('seeker')" class="btn-blue" style="font-size: 0.7rem;">REJOINDRE</button><div id="list-seekers"></div></div>
+                <div class="team-box"><h4>CACHÉS</h4><button onclick="selectTeam('hider')" class="btn-red" style="font-size: 0.7rem;">REJOINDRE</button><div id="list-hiders"></div></div>
             </div>
-            <button id="startBtn" class="hidden btn-green" onclick="requestStart()" disabled>PRÊT ?</button>
+            <button id="startBtn" class="hidden btn-green" onclick="requestStart()" disabled>LANCER LA PARTIE</button>
         </div>
     </div>
 
     <div id="end-screen">
         <h2 id="victory-title">FIN</h2>
-        <p id="victory-desc"></p>
+        <p id="victory-desc" style="font-style: italic; color: #bdc3c7;"></p>
         <button id="backToLobbyBtn" class="btn-green" onclick="requestBackToLobby()" style="display:none;">RETOUR LOBBY</button>
     </div>
 
@@ -82,6 +85,14 @@
     function confirmPseudo() {
         myPseudo = document.getElementById('pseudoInput').value.trim();
         if(myPseudo) { document.getElementById('step-pseudo').classList.add('hidden'); document.getElementById('step-menu').classList.remove('hidden'); }
+    }
+
+    function copyCode() {
+        navigator.clipboard.writeText(roomCode).then(() => {
+            const btn = document.getElementById('copyBtn');
+            btn.innerText = "COPIÉ !";
+            setTimeout(() => btn.innerText = "COPIER", 2000);
+        });
     }
 
     function createRoom() {
@@ -119,7 +130,7 @@
             if(data.type === 'START') { players = data.players; startClientGame(); }
             if(data.type === 'END') showEndScreen(data.winner, data.reason);
             if(data.type === 'BACK_LOBBY') resetToLobby();
-            if(data.type === 'KILL' && isHost) { // Le Host reçoit l'ordre de kill du chercheur
+            if(data.type === 'KILL' && isHost) {
                 broadcast({type: 'END', winner: 'seekers', reason: data.reason});
                 showEndScreen('seekers', data.reason);
             }
@@ -180,8 +191,8 @@
                 if(prepTimer <= 0) gameState = "HUNT";
             } else {
                 gameDuration--;
-                updateTimerDisplay();
-                document.getElementById('game-status').innerText = "TEMPS : " + document.getElementById('timerSetting').innerText;
+                let m = Math.floor(gameDuration/60), s = gameDuration%60;
+                document.getElementById('game-status').innerText = "TEMPS : " + `${m}:${s<10?'0'+s:s}`;
                 if(gameDuration <= 0 && isHost) { broadcast({type: 'END', winner: 'hiders', reason: "Temps écoulé !"}); showEndScreen('hiders', "Temps écoulé !"); }
             }
         }, 1000);
@@ -205,14 +216,13 @@
 
         if(me.team === 'seeker') {
             me.angle = Math.atan2(mousePos.y - canvas.height/2, mousePos.x - canvas.width/2);
-            // LE CHERCHEUR VERIFIE SES PROPRES COLLISIONS (PLUS PRECIS)
             if(gameState === "HUNT") {
                 for(let id in players) {
                     let p = players[id];
                     if(p.team === 'hider') {
                         let dist = Math.sqrt((me.x - p.x)**2 + (me.y - p.y)**2);
-                        if(dist < 45) { // Zone de contact augmentée à 45px
-                            let killMsg = {type: 'KILL', reason: `${p.pseudo} a été attrapé !`};
+                        if(dist < 50) { // Collision validée !
+                            let killMsg = {type: 'KILL', reason: `${p.pseudo} a été brisé !`};
                             if(isHost) { broadcast({type: 'END', winner: 'seekers', reason: killMsg.reason}); showEndScreen('seekers', killMsg.reason); }
                             else { conn.send(killMsg); }
                             gameActive = false;
@@ -267,7 +277,7 @@
         if(me.team === 'seeker') {
             ctx.fillStyle = "black"; ctx.beginPath(); ctx.rect(0,0, canvas.width, canvas.height);
             if(gameState === "HUNT") { ctx.moveTo(canvas.width/2+12, canvas.height/2+12); ctx.arc(canvas.width/2+12, canvas.height/2+12, 500, me.angle-0.55, me.angle+0.55); ctx.fill("evenodd"); }
-            else { ctx.fill(); ctx.fillStyle="white"; ctx.textAlign="center"; ctx.fillText("AVEUGLE", canvas.width/2, canvas.height/2); }
+            else { ctx.fill(); ctx.fillStyle="white"; ctx.textAlign="center"; ctx.fillText("PHASE DE PRÉPARATION", canvas.width/2, canvas.height/2); }
         } else {
             let g = ctx.createRadialGradient(canvas.width/2, canvas.height/2, 100, canvas.width/2, canvas.height/2, canvas.width);
             g.addColorStop(0, "transparent"); g.addColorStop(1, "rgba(0,0,0,0.8)");
