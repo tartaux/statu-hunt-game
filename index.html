@@ -470,24 +470,26 @@
         }
         ctx.restore();
 
-        // Éclairage (Le Noir)
+        // Éclairage Fixé
         ctx.save();
         if(me.team === 'seeker' && !me.isCaptured) {
+            // Création du masque noir
             ctx.fillStyle = "black";
             ctx.beginPath();
-            ctx.rect(0, 0, canvas.width, canvas.height); // Masque global
-            
-            // On soustrait les zones visibles
-            // 1. L'aura du cube
-            ctx.moveTo(canvas.width/2 + 12 + 45, canvas.height/2 + 12);
-            ctx.arc(canvas.width/2 + 12, canvas.height/2 + 12, 45, 0, Math.PI * 2, true);
-            
-            // 2. Le cône de la lampe
+            ctx.rect(0, 0, canvas.width, canvas.height);
+
             if(gameState === "HUNT") {
+                // 1. Cercle de visibilité autour du chercheur
+                ctx.moveTo(canvas.width/2 + 12 + 60, canvas.height/2 + 12);
+                ctx.arc(canvas.width/2 + 12, canvas.height/2 + 12, 60, 0, Math.PI * 2, true);
+
+                // 2. Cône de la lampe
                 ctx.moveTo(canvas.width/2 + 12, canvas.height/2 + 12);
                 ctx.arc(canvas.width/2 + 12, canvas.height/2 + 12, 550, me.angle - 0.55, me.angle + 0.55, true);
                 ctx.lineTo(canvas.width/2 + 12, canvas.height/2 + 12);
             }
+            // Si c'est PREP, on ne dessine aucune excavation (donc tout reste noir)
+            
             ctx.fill();
         } else if(me.team === 'hider' && !me.isCaptured) {
             let g = ctx.createRadialGradient(canvas.width/2, canvas.height/2, 100, canvas.width/2, canvas.height/2, canvas.width);
