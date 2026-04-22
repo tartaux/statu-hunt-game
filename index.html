@@ -504,25 +504,30 @@
         if(me.isCaptured) {
             ctx.fillStyle = "rgba(255,255,255,0.05)"; ctx.fillRect(0,0, canvas.width, canvas.height);
         } else if(me.team === 'seeker') {
-            // Dessiner le fond noir sur tout l'écran
+            // 1. Dessiner le noir partout
             ctx.fillStyle = "black";
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
             if(gameState === "HUNT") {
-                // Utiliser destination-out pour "creuser" la lumière dans le noir
+                // 2. Préparer le "gommage" (tout ce qu'on dessine maintenant va trouer le noir)
                 ctx.globalCompositeOperation = 'destination-out';
                 
                 ctx.beginPath();
-                // 1. Cercle de proximité
+                // Cercle autour du joueur
                 ctx.arc(canvas.width/2+12, canvas.height/2+12, 80, 0, Math.PI*2);
-                // 2. Cône de la lampe
+                ctx.fill();
+
+                ctx.beginPath();
+                // Cône de vision
                 ctx.moveTo(canvas.width/2+12, canvas.height/2+12);
                 ctx.arc(canvas.width/2+12, canvas.height/2+12, 550, me.angle-0.55, me.angle+0.55);
-                ctx.closePath();
-                
+                ctx.lineTo(canvas.width/2+12, canvas.height/2+12);
                 ctx.fill();
-                // Revenir au mode normal
+
+                // 3. Remettre en mode normal pour ne pas affecter le reste du rendu
                 ctx.globalCompositeOperation = 'source-over';
+            } else {
+                // En PREP, tout est noir pour le chercheur
             }
         } else {
             let g = ctx.createRadialGradient(canvas.width/2, canvas.height/2, 100, canvas.width/2, canvas.height/2, canvas.width);
