@@ -21,7 +21,7 @@
         canvas { position: absolute; top: 0; left: 0; display: none; background: #000; }
         #ui-game { position: absolute; top: 20px; left: 20px; z-index: 50; display: none; pointer-events: none; width: calc(100% - 40px); }
         #game-status { color: #f1c40f; font-weight: bold; font-size: 1.8rem; text-shadow: 3px 3px 5px #000; }
-     
+        
         #game-overlay { 
             position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
             display: flex; flex-direction: column; justify-content: center; align-items: center; 
@@ -39,6 +39,12 @@
         .size-btn { font-size: 0.7rem; padding: 5px 10px; opacity: 0.5; }
         .size-btn.active { opacity: 1; border: 2px solid #f1c40f; }
         .hidden { display: none !important; }
+
+        #ability-ui {
+            position: absolute; bottom: 20px; right: 20px; text-align: right; pointer-events: none;
+        }
+        .ability-box { background: rgba(0,0,0,0.7); padding: 10px; border-radius: 10px; border: 1px solid #f1c40f; display: inline-block; }
+        .cooldown-text { font-size: 0.8rem; color: #bdc3c7; margin-bottom: 5px; }
     </style>
 </head>
 <body>
@@ -95,6 +101,12 @@
         <div id="fear-ui" class="fear-bar-container hidden">
             <div class="fear-bar"><div id="fear-fill"></div></div>
         </div>
+        <div id="ability-ui" class="hidden">
+            <div class="ability-box">
+                <div class="cooldown-text">LEURRE (CLIC GAUCHE)</div>
+                <div id="ability-cooldown-bar" style="width: 100px; height: 10px; background: #27ae60; border-radius: 5px;"></div>
+            </div>
+        </div>
     </div>
 
     <canvas id="gameCanvas"></canvas>
@@ -109,10 +121,13 @@
     const ctx = canvas.getContext('2d');
     let statues = [];
     let bushes = [];
+    let baits = [];
     const keys = {};
     let mousePos = { x: 0, y: 0 };
     const waves = [];
     let lastShockwave = 0;
+    let lastBaitTime = 0;
+    let stunTimer = 0;
     let detectionArrows = [];
     let fearSpamCounter = 0;
 
@@ -192,7 +207,7 @@
                 document.getElementById('size-' + data.size).classList.add('active');
             }
             if(data.type === 'START') { 
-                players = data.players; statues = data.statues; bushes = data.bushes;
+                players = data.players; statues = data.statues; bushes = data.bushes; baits = [];
                 startClientGame(); 
             }
             if(data.type === 'END') showEndScreen(data.winner, data.reason);
@@ -204,6 +219,8 @@
             if(data.type === 'POS') { if(players[data.id]) players[data.id] = {...players[data.id], ...data}; }
             if(data.type === 'SHOCKWAVE') { waves.push({x: data.x, y: data.y, r: 0, maxR: data.maxR, owner: data.owner, waveType: data.waveType, isBushWave: data.isBushWave}); }
             if(data.type === 'FEAR_HIT' && data.targetId === myId && !players[myId].isCaptured) { players[myId].fear = Math.min(100, players[myId].fear + data.amount); }
+            if(data.type === 'SYNC_BAITS') { baits = data.baits; }
+            if(data.type === 'STUN' && data.targetId === myId) { stunTimer = 180; }
         });
         if(!isHost && c === hostConn) {
             c.on('open', () => c.send({type: 'JOIN', pseudo: myPseudo}));
@@ -274,14 +291,16 @@
 
         if(me.team === 'seeker') {
             overlay.innerHTML = '<div class="text-pulse">LA CHASSE COMMENCE BIENTÔT...</div>';
+            document.getElementById('ability-ui').classList.add('hidden');
         } else {
             overlay.innerHTML = '<div class="text-alert">COURREZ ! LES CHASSEURS ARRIVENT !</div>';
             setTimeout(() => overlay.style.opacity = 0, 4000);
+            document.getElementById('ability-ui').classList.remove('hidden');
         }
 
         canvas.style.display = 'block';
         canvas.width = window.innerWidth; canvas.height = window.innerHeight;
-        waves.length = 0; detectionArrows.length = 0;
+        waves.length = 0; detectionArrows.length = 0; baits = []; stunTimer = 0;
         gameActive = true; gameState = "PREP"; prepTimer = 10;
         lastUpdate = Date.now();
         clearInterval(logicInterval); clearInterval(masterTimer);
@@ -306,15 +325,21 @@
         const now = Date.now(), dt = (now - lastUpdate) / 16.66;
         lastUpdate = now;
 
-        let moved = false;
-        if(!(me.team === 'seeker' && gameState === "PREP")) {
-            let spd = (me.isCaptured ? 8 : (me.team === 'seeker' ? 6 : 4.5)) * dt;
-            if(keys['z'] || keys['w']) { me.y -= spd; moved = true; }
-            if(keys['s']) { me.y += spd; moved = true; }
-            if(keys['q'] || keys['a']) { me.x -= spd; moved = true; }
-            if(keys['d']) { me.x += spd; moved = true; }
+        if(stunTimer > 0) {
+            stunTimer -= 1 * dt;
+            me.isMoving = false;
+        } else {
+            let moved = false;
+            if(!(me.team === 'seeker' && gameState === "PREP")) {
+                let spd = (me.isCaptured ? 8 : (me.team === 'seeker' ? 6 : 4.5)) * dt;
+                if(keys['z'] || keys['w']) { me.y -= spd; moved = true; }
+                if(keys['s']) { me.y += spd; moved = true; }
+                if(keys['q'] || keys['a']) { me.x -= spd; moved = true; }
+                if(keys['d']) { me.x += spd; moved = true; }
+            }
+            me.isMoving = moved;
         }
-        me.isMoving = moved;
+
         me.x = Math.max(15, Math.min(mapW - 35, me.x));
         me.y = Math.max(15, Math.min(mapH - 35, me.y));
 
@@ -325,6 +350,7 @@
         }
         me.inBush = currentlyInBush;
 
+        // Gestion du radar du chercheur pour les joueurs ET les baits
         for(let i = waves.length - 1; i >= 0; i--) {
             let w = waves[i]; w.r += 12 * dt;
             if(w.owner === myId && me.team === 'seeker' && w.waveType === 'seeker') {
@@ -339,19 +365,44 @@
                         }
                     }
                 }
+                // Détection des Baits par le radar
+                baits.forEach((b, idx) => {
+                    if(!w['hit_bait_'+idx]) {
+                        let dist = Math.sqrt((w.x - (b.x+12))**2 + (w.y - (b.y+12))**2);
+                        if(Math.abs(dist - w.r) < 25) {
+                            w['hit_bait_'+idx] = true;
+                            detectionArrows.push({angle: Math.atan2((b.y+12)-(me.y+12), (b.x+12)-(me.x+12)), life: 60});
+                        }
+                    }
+                });
             }
             if(w.r > w.maxR) waves.splice(i, 1);
         }
 
+        // Logic des Baits (Peur constante)
+        if(isHost) {
+            let baitChanged = false;
+            baits.forEach(b => {
+                b.fearTimer += 1 * dt;
+                if(b.fearTimer >= 20) {
+                    b.fearTimer = 0;
+                    let waveData = {type: 'SHOCKWAVE', x: b.x + 12, y: b.y + 12, owner: 'bait', maxR: 150, waveType: 'fear', isBushWave: false};
+                    waves.push({x: waveData.x, y: waveData.y, r: 0, maxR: 150, owner: 'bait', waveType: 'fear', isBushWave: false});
+                    broadcast(waveData);
+                }
+            });
+        }
+
         for(let i = detectionArrows.length - 1; i >= 0; i--) {
-            detectionArrows[i].life -= 1.2 * dt; // Un peu plus rapide
+            detectionArrows[i].life -= 1.2 * dt;
             if(detectionArrows[i].life <= 0) detectionArrows.splice(i, 1);
         }
 
-        if(!me.isCaptured) {
+        if(!me.isCaptured && stunTimer <= 0) {
             if(me.team === 'seeker') {
                 me.angle = Math.atan2(mousePos.y - canvas.height/2, mousePos.x - canvas.width/2);
                 if(gameState === "HUNT") {
+                    // Check capture joueurs
                     for(let id in players) {
                         if(id === myId) continue;
                         let p = players[id];
@@ -364,12 +415,26 @@
                             }
                         }
                     }
+                    // Check collision Baits (Stun)
+                    baits.forEach((b, idx) => {
+                        let dist = Math.sqrt((me.x - b.x)**2 + (me.y - b.y)**2);
+                        if(dist < 40) {
+                            stunTimer = 180; // 3 secondes
+                            if(isHost) { 
+                                baits.splice(idx, 1); 
+                                broadcast({type: 'SYNC_BAITS', baits: baits});
+                                broadcast({type: 'STUN', targetId: myId});
+                            } else {
+                                hostConn.send({type: 'HIT_BAIT', index: idx, seekerId: myId});
+                            }
+                        }
+                    });
                 }
             } else if(gameState === "HUNT") {
                 let wasInBush = me.inBush;
                 if(me.inBush) { me.fear = 100; } 
                 else {
-                    if(!moved) me.fear = Math.min(100, me.fear + 0.4 * dt); 
+                    if(!me.isMoving) me.fear = Math.min(100, me.fear + 0.4 * dt); 
                     else me.fear = Math.max(0, me.fear - 1.2 * dt);
                 }
                 
@@ -382,11 +447,30 @@
                         if(isHost) broadcast(waveData); else if(hostConn && hostConn.open) hostConn.send(waveData);
                     }
                 } else { fearSpamCounter = 0; }
+
+                // UI Cooldown
+                let progress = Math.min(100, ((Date.now() - lastBaitTime) / 30000) * 100);
+                document.getElementById('ability-cooldown-bar').style.width = progress + "px";
+                document.getElementById('ability-cooldown-bar').style.background = progress >= 100 ? "#27ae60" : "#e67e22";
             }
         }
         
         let syncData = {type: 'POS', id: myId, x: me.x, y: me.y, angle: me.angle, fear: me.fear, isMoving: me.isMoving, isCaptured: me.isCaptured, inBush: me.inBush};
         if(isHost) broadcast(syncData); else if(hostConn && hostConn.open) hostConn.send(syncData);
+
+        if(isHost && hostConn) {
+            hostConn.on('data', (data) => {
+                if(data.type === 'HIT_BAIT') {
+                    baits.splice(data.index, 1);
+                    broadcast({type: 'SYNC_BAITS', baits: baits});
+                    broadcast({type: 'STUN', targetId: data.seekerId});
+                }
+                if(data.type === 'PLACE_BAIT') {
+                    baits.push({x: data.x, y: data.y, fearTimer: 0});
+                    broadcast({type: 'SYNC_BAITS', baits: baits});
+                }
+            });
+        }
     }
 
     function draw() {
@@ -406,6 +490,11 @@
 
         statues.forEach(s => drawStatue(s.x, s.y, "#555", false, false, false, false, 0));
         
+        // Dessin des Baits
+        baits.forEach(b => {
+            drawStatue(b.x, b.y, "#962d22", true, false, false, false, 100);
+        });
+
         waves.forEach(w => {
             if(w.waveType === 'seeker') {
                 ctx.beginPath(); ctx.arc(w.x, w.y, w.r, 0, Math.PI * 2);
@@ -428,7 +517,10 @@
                 let baseColor = p.isMoving ? "#333" : "#555"; 
                 let color = (id === myId || me.team !== 'seeker') && p.fear > 80 ? "#962d22" : baseColor;
                 drawStatue(p.x, p.y, color, p.fear >= 100, (id===myId), p.isMoving, false, p.fear);
-            } else { drawSeeker(p); }
+            } else { 
+                drawSeeker(p); 
+                if(stunTimer > 0 && id === myId) drawStunStars(p.x, p.y);
+            }
         }
         ctx.restore();
 
@@ -444,34 +536,21 @@
         });
         ctx.restore();
 
-        // Système d'Arcs Radar (Remplacement des flèches)
         if(me.team === 'seeker' && !me.isCaptured) {
             detectionArrows.forEach(arr => {
                 const opacity = arr.life / 60;
-                const distance = 120 + (1 - opacity) * 80; // L'arc s'éloigne du joueur
-                
+                const distance = 120 + (1 - opacity) * 80;
                 ctx.save();
                 ctx.translate(canvas.width/2 + 12, canvas.height/2 + 12);
                 ctx.rotate(arr.angle);
-                
                 ctx.beginPath();
-                // On dessine un arc de cercle centré sur la cible
-                // L'arc fait 60 degrés (Math.PI / 3)
                 ctx.arc(0, 0, distance, -Math.PI/6, Math.PI/6);
-                
                 ctx.shadowBlur = 20 * opacity;
                 ctx.shadowColor = "#f1c40f";
                 ctx.strokeStyle = `rgba(241, 196, 15, ${opacity})`;
                 ctx.lineWidth = 6 * opacity + 2;
                 ctx.lineCap = "round";
                 ctx.stroke();
-
-                // Petit point central de l'arc pour bien marquer l'axe
-                ctx.fillStyle = `rgba(241, 196, 15, ${opacity * 0.5})`;
-                ctx.beginPath();
-                ctx.arc(distance + 10, 0, 4, 0, Math.PI*2);
-                ctx.fill();
-                
                 ctx.restore();
             });
         }
@@ -480,6 +559,22 @@
             document.getElementById('fear-fill').style.width = me.fear + "%"; 
         } else { document.getElementById('fear-ui').classList.add('hidden'); }
         requestAnimationFrame(draw);
+    }
+
+    function drawStunStars(x, y) {
+        const time = Date.now() * 0.005;
+        for(let i=0; i<3; i++) {
+            const angle = time + (i * Math.PI * 2 / 3);
+            const sx = x + 12 + Math.cos(angle) * 20;
+            const sy = y - 10 + Math.sin(angle) * 8;
+            ctx.fillStyle = "#f1c40f";
+            ctx.beginPath();
+            for(let j=0; j<5; j++) {
+                ctx.lineTo(sx + Math.cos(j*Math.PI*0.8)*6, sy + Math.sin(j*Math.PI*0.8)*6);
+            }
+            ctx.closePath();
+            ctx.fill();
+        }
     }
 
     function drawStatue(x, y, color, pulse, isSelf, moving, isGhost, fearValue) {
@@ -565,6 +660,7 @@
         document.getElementById('game-overlay').style.opacity = 0;
         document.getElementById('lobby').style.display = 'block'; 
         for(let id in players) { players[id].isCaptured = false; players[id].fear = 0; players[id].inBush = false; }
+        baits = []; stunTimer = 0;
         let timeParts = document.getElementById('timerSetting').innerText.split(':');
         gameDuration = parseInt(timeParts[0]) * 60 + parseInt(timeParts[1]);
         updateTimerDisplay(); refreshUI(); 
@@ -584,12 +680,24 @@
     window.addEventListener('mousemove', e => { mousePos.x = e.clientX; mousePos.y = e.clientY; });
     window.addEventListener('mousedown', e => {
         const me = players[myId];
-        if(gameActive && !me.isCaptured && gameState === "HUNT" && me.team === 'seeker' && e.button === 0) {
+        if(!gameActive || me.isCaptured || gameState !== "HUNT" || stunTimer > 0) return;
+
+        if(me.team === 'seeker' && e.button === 0) {
             if(Date.now() - lastShockwave > 4000) {
                 lastShockwave = Date.now();
                 let waveData = {type: 'SHOCKWAVE', x: me.x + 12, y: me.y + 12, owner: myId, maxR: mapW, waveType: 'seeker', isBushWave: false};
                 waves.push({x: waveData.x, y: waveData.y, r: 0, maxR: mapW, owner: myId, waveType: 'seeker', isBushWave: false});
                 if(isHost) broadcast(waveData); else if(hostConn && hostConn.open) hostConn.send(waveData);
+            }
+        } else if(me.team === 'hider' && e.button === 0) {
+            if(Date.now() - lastBaitTime > 30000) {
+                lastBaitTime = Date.now();
+                if(isHost) {
+                    baits.push({x: me.x, y: me.y, fearTimer: 0});
+                    broadcast({type: 'SYNC_BAITS', baits: baits});
+                } else {
+                    hostConn.send({type: 'PLACE_BAIT', x: me.x, y: me.y});
+                }
             }
         }
     });
