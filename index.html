@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Statu Hunt - Ghost Spectator</title>
+    <title>Statu Hunt - Team Visibility Fix</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         body { margin: 0; background: #0a0a0a; color: white; font-family: 'Segoe UI', sans-serif; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; }
@@ -182,7 +182,7 @@
             if(data.type === 'BACK_LOBBY') resetToLobby();
             if(data.type === 'POS') { if(players[data.id]) players[data.id] = {...players[data.id], ...data}; }
             if(data.type === 'SHOCKWAVE') { waves.push({x: data.x, y: data.y, r: 0, maxR: data.maxR, owner: data.owner, waveType: data.waveType, isBushWave: data.isBushWave}); }
-            if(data.type === 'CAPTURE') { if(players[data.targetId]) players[data.targetId].isCaptured = true; if(isHost) checkWinCondition(); }
+            if(data.type === 'CAPTURE') { if(players[data.targetId]) { players[data.targetId].isCaptured = true; if(isHost) { broadcast({type: 'SYNC', players: players}); checkWinCondition(); } } }
             if(data.type === 'FEAR_HIT' && data.targetId === myId) { players[myId].fear = Math.min(100, players[myId].fear + data.amount); }
         });
         if(!isHost && c === hostConn) c.on('open', () => c.send({type: 'JOIN', pseudo: myPseudo}));
@@ -254,7 +254,6 @@
         lastUpdate = now;
         let moved = false;
         if(!(me.team === 'seeker' && gameState === "PREP")) {
-            // Un spectre se déplace plus vite pour pouvoir bien observer
             let spd = (me.isCaptured ? 8 : (me.team === 'seeker' ? 6 : 4.5)) * dt;
             if(keys['z'] || keys['w']) { me.y -= spd; moved = true; }
             if(keys['s']) { me.y += spd; moved = true; }
@@ -274,7 +273,6 @@
             if(gameState === "HUNT") {
                 for(let id in players) {
                     let p = players[id];
-                    // On ne peut capturer que les joueurs vivants
                     if(id !== myId && p.team === 'hider' && !p.isCaptured && Math.sqrt((me.x - p.x)**2 + (me.y - p.y)**2) < 40) {
                         if(isHost) { players[id].isCaptured = true; broadcast({type: 'SYNC', players: players}); checkWinCondition(); }
                         else if(hostConn?.open) hostConn.send({type: 'CAPTURE', targetId: id});
@@ -340,68 +338,38 @@
         for(let id in players) {
             let p = players[id];
             
-            // LOGIQUE DE DESSIN SELON L'ÉTAT (VIVANT/MORT) ET LA TEAM
             if(p.team === 'hider') {
                 if (p.isCaptured) {
-                    // SI CAPTURÉ : Seul le joueur lui-même se voit (en spectre blanc avec ailes)
                     if (id === myId) {
                         ctx.save();
-                        ctx.fillStyle = "white";
-                        ctx.fillRect(p.x, p.y, 25, 25);
-                        // Dessin des petites ailes
-                        ctx.strokeStyle = "white";
-                        ctx.lineWidth = 2;
-                        let wingY = p.y + 10 + Math.sin(Date.now()/100) * 5; // Animation battement
-                        ctx.beginPath(); // Aile gauche
-                        ctx.moveTo(p.x, p.y + 12); ctx.lineTo(p.x - 15, wingY); ctx.lineTo(p.x, p.y + 5);
-                        ctx.stroke();
-                        ctx.beginPath(); // Aile droite
-                        ctx.moveTo(p.x + 25, p.y + 12); ctx.lineTo(p.x + 40, wingY); ctx.lineTo(p.x + 25, p.y + 5);
-                        ctx.stroke();
-                        
-                        ctx.fillStyle = "white";
-                        ctx.font = "bold 12px Arial";
-                        ctx.textAlign = "center";
-                        ctx.fillText("SPECTRE", p.x + 12, p.y - 10);
-                        ctx.restore();
+                        ctx.fillStyle = "white"; ctx.fillRect(p.x, p.y, 25, 25);
+                        ctx.strokeStyle = "white"; ctx.lineWidth = 2;
+                        let wingY = p.y + 10 + Math.sin(Date.now()/100) * 5;
+                        ctx.beginPath(); ctx.moveTo(p.x, p.y + 12); ctx.lineTo(p.x - 15, wingY); ctx.lineTo(p.x, p.y + 5); ctx.stroke();
+                        ctx.beginPath(); ctx.moveTo(p.x + 25, p.y + 12); ctx.lineTo(p.x + 40, wingY); ctx.lineTo(p.x + 25, p.y + 5); ctx.stroke();
+                        ctx.fillStyle = "white"; ctx.font = "bold 12px Arial"; ctx.textAlign = "center";
+                        ctx.fillText("SPECTRE", p.x + 12, p.y - 10); ctx.restore();
                     }
-                    // Les autres ne voient rien (invisible)
                 } else {
-                    // SI VIVANT : Dessin normal
-                    ctx.fillStyle = (id === myId || me.team !== 'seeker') && p.fear > 80 ? "#962d22" : (p.isMoving ? "#333" : "#555");
-                    ctx.fillRect(p.x, p.y, 25, 25);
-
-                    if (me.team === 'hider') {
-                        ctx.strokeStyle = "rgba(46, 204, 113, 0.5)";
-                        ctx.lineWidth = 2;
-                        ctx.strokeRect(p.x - 2, p.y - 2, 29, 29);
-                        ctx.fillStyle = "white";
-                        ctx.font = "bold 12px Arial";
-                        ctx.textAlign = "center";
-                        ctx.fillText(p.pseudo, p.x + 12, p.y - 10);
+                    // Les Hiders vivants voient leurs alliés vivants EN PERMANENCE
+                    if (me.team === 'hider' || (me.team === 'seeker' && Math.sqrt((me.x-p.x)**2 + (me.y-p.y)**2) < 600)) {
+                         ctx.fillStyle = (id === myId || me.team !== 'seeker') && p.fear > 80 ? "#962d22" : (p.isMoving ? "#333" : "#555");
+                         ctx.fillRect(p.x, p.y, 25, 25);
+                         if (me.team === 'hider') {
+                            ctx.strokeStyle = "rgba(46, 204, 113, 0.5)"; ctx.lineWidth = 2; ctx.strokeRect(p.x - 2, p.y - 2, 29, 29);
+                            ctx.fillStyle = "white"; ctx.font = "bold 12px Arial"; ctx.textAlign = "center";
+                            ctx.fillText(p.pseudo, p.x + 12, p.y - 10);
+                         }
                     }
                 }
             } else {
-                // CHERCHEUR : Toujours visible
-                ctx.save();
-                ctx.translate(p.x + 12, p.y + 12);
-                ctx.rotate(p.angle);
-                ctx.fillStyle = "#2980b9";
-                ctx.strokeStyle = "#3498db";
-                ctx.lineWidth = 3;
-                ctx.beginPath();
-                ctx.roundRect(-15, -15, 30, 30, 5);
-                ctx.fill();
-                ctx.stroke();
-                ctx.fillStyle = "#ecf0f1";
-                ctx.fillRect(5, -8, 5, 16); 
-                ctx.shadowBlur = 15;
-                ctx.shadowColor = "#3498db";
-                ctx.stroke();
+                ctx.save(); ctx.translate(p.x + 12, p.y + 12); ctx.rotate(p.angle);
+                ctx.fillStyle = "#2980b9"; ctx.strokeStyle = "#3498db"; ctx.lineWidth = 3;
+                ctx.beginPath(); ctx.roundRect(-15, -15, 30, 30, 5); ctx.fill(); ctx.stroke();
+                ctx.fillStyle = "#ecf0f1"; ctx.fillRect(5, -8, 5, 16); 
+                ctx.shadowBlur = 15; ctx.shadowColor = "#3498db"; ctx.stroke();
                 ctx.restore();
-                ctx.fillStyle = "#3498db";
-                ctx.font = "bold 14px Arial";
-                ctx.textAlign = "center";
+                ctx.fillStyle = "#3498db"; ctx.font = "bold 14px Arial"; ctx.textAlign = "center";
                 ctx.fillText(p.pseudo, p.x + 12, p.y - 18);
             }
         }
@@ -425,11 +393,8 @@
     function drawLighting(me) {
         if (!gameActive) return;
         const camX = -me.x + canvas.width/2, camY = -me.y + canvas.height/2;
-
         if (me.team === 'seeker') {
-            vCtx.globalCompositeOperation = 'source-over';
-            vCtx.fillStyle = "black";
-            vCtx.fillRect(0, 0, vCanvas.width, vCanvas.height);
+            vCtx.globalCompositeOperation = 'source-over'; vCtx.fillStyle = "black"; vCtx.fillRect(0, 0, vCanvas.width, vCanvas.height);
             if (gameState === "HUNT") {
                 vCtx.globalCompositeOperation = 'destination-out';
                 vCtx.beginPath(); vCtx.arc(canvas.width/2 + 12, canvas.height/2 + 12, 45, 0, Math.PI * 2); vCtx.fill();
@@ -438,60 +403,41 @@
                 vCtx.closePath(); vCtx.fill();
             }
             vCtx.globalCompositeOperation = 'source-over';
-            waves.forEach(w => {
-                if(w.waveType === 'fear' && w.isBushWave) {
-                    vCtx.beginPath(); vCtx.arc(w.x + camX, w.y + camY, w.r, 0, Math.PI * 2);
-                    vCtx.strokeStyle = `rgba(255, 0, 0, ${1 - w.r/w.maxR})`; vCtx.lineWidth = 8; vCtx.stroke();
-                }
-            });
+            waves.forEach(w => { if(w.waveType === 'fear' && w.isBushWave) { vCtx.beginPath(); vCtx.arc(w.x + camX, w.y + camY, w.r, 0, Math.PI * 2); vCtx.strokeStyle = `rgba(255, 0, 0, ${1 - w.r/w.maxR})`; vCtx.lineWidth = 8; vCtx.stroke(); } });
             ctx.drawImage(vCanvas, 0, 0);
         } else {
-            // Hider (vivant ou spectre) voient la zone autour d'eux
             ctx.save();
             let g = ctx.createRadialGradient(canvas.width/2, canvas.height/2, 100, canvas.width/2, canvas.height/2, canvas.width);
             g.addColorStop(0, "transparent"); g.addColorStop(1, "rgba(0,0,0,0.85)");
             ctx.fillStyle = g; ctx.fillRect(0,0, canvas.width, canvas.height);
             ctx.translate(camX, camY);
-            waves.forEach(w => {
-                if(w.waveType === 'fear') {
-                    ctx.beginPath(); ctx.arc(w.x, w.y, w.r, 0, Math.PI * 2);
-                    ctx.strokeStyle = `rgba(255, 0, 0, ${1 - w.r/w.maxR})`; ctx.lineWidth = 8; ctx.stroke();
-                }
-            });
+            waves.forEach(w => { if(w.waveType === 'fear') { ctx.beginPath(); ctx.arc(w.x, w.y, w.r, 0, Math.PI * 2); ctx.strokeStyle = `rgba(255, 0, 0, ${1 - w.r/w.maxR})`; ctx.lineWidth = 8; ctx.stroke(); } });
             ctx.restore();
         }
     }
 
     function checkWinCondition() {
-        let activeHiders = 0;
-        for(let id in players) if(players[id].team === 'hider' && !players[id].isCaptured) activeHiders++;
-        if(activeHiders === 0 && gameActive) { broadcast({type: 'END', winner: 'seekers', reason: "Intrus trouvés !"}); showEndScreen('seekers', "Tous les intrus ont été brisés !"); }
+        let aliveHiders = 0;
+        for(let id in players) if(players[id].team === 'hider' && !players[id].isCaptured) aliveHiders++;
+        if(aliveHiders === 0 && gameActive) { broadcast({type: 'END', winner: 'seekers', reason: "Tout le monde a été capturé !"}); showEndScreen('seekers', "L'ombre a tout consumé."); }
     }
 
     function showEndScreen(w, r) {
         gameActive = false; clearInterval(logicInterval); clearInterval(masterTimer);
-        document.getElementById('ui-game').style.display = 'none'; 
-        document.getElementById('end-screen').style.display = 'block';
+        document.getElementById('ui-game').style.display = 'none'; document.getElementById('end-screen').style.display = 'block';
         document.getElementById('victory-title').innerText = (w === 'seekers') ? "VICTOIRE CHERCHEURS" : "VICTOIRE CACHÉS";
         document.getElementById('victory-desc').innerText = r;
     }
 
     function requestBackToLobby() { if(isHost) { broadcast({type: 'BACK_LOBBY'}); resetToLobby(); } }
-    function resetToLobby() { 
-        gameActive = false; canvas.style.display = 'none'; document.getElementById('end-screen').style.display = 'none'; 
-        document.getElementById('lobby').style.display = 'block'; 
-        refreshUI(); 
-    }
+    function resetToLobby() { gameActive = false; canvas.style.display = 'none'; document.getElementById('end-screen').style.display = 'none'; document.getElementById('lobby').style.display = 'block'; refreshUI(); }
 
     function generateMapForHost() {
         statues = [];
         let step = mapSizeKey === 'S' ? 120 : mapSizeKey === 'M' ? 100 : 80;
         for(let x = 100; x < mapW - 100; x += step) {
             for(let y = 100; y < mapH - 100; y += step) {
-                statues.push({
-                    x: x + (Math.random() - 0.5) * (step * 0.6),
-                    y: y + (Math.random() - 0.5) * (step * 0.6)
-                });
+                statues.push({ x: x + (Math.random() - 0.5) * (step * 0.6), y: y + (Math.random() - 0.5) * (step * 0.6) });
             }
         }
         bushes = [];
@@ -508,10 +454,8 @@
         playerIds.forEach((id, index) => {
             let angle = (index / playerIds.length) * Math.PI * 2;
             playerStarts[id] = { x: centerX + Math.cos(angle) * radius, y: centerY + Math.sin(angle) * radius };
-            players[id].x = playerStarts[id].x;
-            players[id].y = playerStarts[id].y;
-            players[id].isCaptured = false;
-            players[id].fear = 0;
+            players[id].x = playerStarts[id].x; players[id].y = playerStarts[id].y;
+            players[id].isCaptured = false; players[id].fear = 0;
         });
         broadcast({ type: 'START', statues: statues, bushes: bushes, playerStarts: playerStarts }); 
         startClientGame(); 
@@ -522,7 +466,6 @@
     window.addEventListener('mousemove', e => { mousePos.x = e.clientX; mousePos.y = e.clientY; });
     window.addEventListener('mousedown', e => {
         const me = players[myId];
-        // Seuls les chercheurs vivants peuvent envoyer des ondes radar
         if(gameActive && !me.isCaptured && gameState === "HUNT" && me.team === 'seeker' && Date.now() - lastShockwave > 4000) {
             lastShockwave = Date.now();
             let wave = {type: 'SHOCKWAVE', x: me.x + 12, y: me.y + 12, owner: myId, maxR: mapW, waveType: 'seeker'};
