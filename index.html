@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Statu Hunt - Lobby Fixed</title>
+    <title>Statu Hunt - Final Vision Fix</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         body { margin: 0; background: #0a0a0a; color: white; font-family: 'Segoe UI', sans-serif; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; }
@@ -279,9 +279,16 @@
                 ctx.fillStyle = "#ecf0f1"; ctx.fillRect(5, -8, 5, 16); ctx.restore();
             } else {
                 let dist = Math.sqrt((me.x-p.x)**2 + (me.y-p.y)**2);
-                if((me.team === 'hider' && !p.isCaptured) || (me.team === 'seeker' && dist < 550 && !p.isCaptured)) {
-                    ctx.fillStyle = (id === myId || me.team !== 'seeker') && p.fear > 80 ? "#962d22" : (p.isMoving ? "#333" : "#555");
+                // LOGIQUE VISIBILITÉ CORRIGÉE :
+                // Les hiders voient leurs alliés hiders.
+                // Les seekers voient les hiders comme des statues (#555) SI ils sont dans la lampe (géré par drawLighting).
+                if((me.team === 'hider' && !p.isCaptured) || (me.team === 'seeker' && !p.isCaptured)) {
+                    ctx.fillStyle = (me.team === 'hider' && p.fear > 80) ? "#962d22" : (p.isMoving ? "#333" : "#555");
                     ctx.fillRect(p.x, p.y, 25, 25);
+                    if(me.team === 'hider') {
+                        ctx.fillStyle = "#2ecc71"; ctx.font = "bold 12px Arial"; ctx.textAlign = "center";
+                        ctx.fillText(p.pseudo, p.x + 12, p.y - 10);
+                    }
                 }
             }
         }
@@ -293,20 +300,20 @@
 
     function drawLighting(me) {
         if (!gameActive) return;
-        vCtx.clearRect(0,0,vCanvas.width,vCanvas.height);
+        vCanvas.width = canvas.width; vCanvas.height = canvas.height;
+        vCtx.fillStyle = "black"; vCtx.fillRect(0, 0, vCanvas.width, vCanvas.height);
+        vCtx.globalCompositeOperation = 'destination-out';
+        
         if (me.team === 'seeker') {
-            vCtx.fillStyle = "black"; vCtx.fillRect(0, 0, vCanvas.width, vCanvas.height);
-            vCtx.globalCompositeOperation = 'destination-out';
             vCtx.beginPath(); vCtx.arc(canvas.width/2 + 12, canvas.height/2 + 12, 50, 0, Math.PI * 2); vCtx.fill();
             vCtx.beginPath(); vCtx.moveTo(canvas.width/2 + 12, canvas.height/2 + 12);
             vCtx.arc(canvas.width/2 + 12, canvas.height/2 + 12, 550, me.angle - 0.6, me.angle + 0.6); vCtx.fill();
-            ctx.drawImage(vCanvas, 0, 0);
         } else {
-            ctx.save();
-            let g = ctx.createRadialGradient(canvas.width/2, canvas.height/2, 100, canvas.width/2, canvas.height/2, canvas.width);
-            g.addColorStop(0, "transparent"); g.addColorStop(1, "rgba(0,0,0,0.85)");
-            ctx.fillStyle = g; ctx.fillRect(0,0, canvas.width, canvas.height); ctx.restore();
+            let g = vCtx.createRadialGradient(canvas.width/2, canvas.height/2, 50, canvas.width/2, canvas.height/2, 450);
+            g.addColorStop(0, "white"); g.addColorStop(1, "transparent");
+            vCtx.fillStyle = g; vCtx.beginPath(); vCtx.arc(canvas.width/2, canvas.height/2, 450, 0, Math.PI*2); vCtx.fill();
         }
+        ctx.drawImage(vCanvas, 0, 0);
     }
 
     function checkWinCondition() {
