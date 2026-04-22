@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Statu Hunt - Bush & Fear System</title>
+    <title>Statu Hunt - Fixed Bushes & Waves</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         body { margin: 0; background: #0a0a0a; color: white; font-family: 'Segoe UI', sans-serif; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; }
@@ -290,7 +290,6 @@
         me.x = Math.max(15, Math.min(mapW - 35, me.x));
         me.y = Math.max(15, Math.min(mapH - 35, me.y));
 
-        // Check if inside a bush
         let currentlyInBush = false;
         for(let bush of bushes) {
             let dist = Math.sqrt((me.x+12 - bush.x)**2 + (me.y+12 - bush.y)**2);
@@ -303,7 +302,6 @@
             if(w.owner === myId && me.team === 'seeker' && w.waveType === 'seeker') {
                 for(let id in players) {
                     let p = players[id];
-                    // ANTI-DÉTECTION : Si le joueur est dans un buisson, l'onde bleue l'ignore
                     if(p.team === 'hider' && !p.isCaptured && !p.inBush && !w['hit_'+id]) {
                         let dist = Math.sqrt((w.x - (p.x+12))**2 + (w.y - (p.y+12))**2);
                         if(Math.abs(dist - w.r) < 25) {
@@ -340,10 +338,8 @@
                     }
                 }
             } else if(gameState === "HUNT") {
-                // LOGIQUE PEUR BUISSON
-                if(me.inBush) {
-                    me.fear = 100; // Peur instantanée max dans le buisson
-                } else {
+                if(me.inBush) { me.fear = 100; } 
+                else {
                     if(!moved) me.fear = Math.min(100, me.fear + 0.4 * dt); 
                     else me.fear = Math.max(0, me.fear - 1.2 * dt);
                 }
@@ -374,7 +370,7 @@
         ctx.strokeStyle = "#f1c40f"; ctx.lineWidth = 10; ctx.strokeRect(0,0, mapW, mapH);
         ctx.fillStyle = "#111"; ctx.fillRect(0,0, mapW, mapH);
         
-        // Buissons
+        // Buissons dessinés ICI (avant la lumière) pour être visibles de tous
         bushes.forEach(b => {
             ctx.fillStyle = "#0a2b0a"; ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI*2); ctx.fill();
             ctx.strokeStyle = "#1a3d1a"; ctx.lineWidth = 5; ctx.stroke();
@@ -382,45 +378,41 @@
 
         statues.forEach(s => drawStatue(s.x, s.y, "#555", false, false, false, false, 0));
         
+        // Ondes bleues (Seeker) et normales
         waves.forEach(w => {
-            ctx.beginPath(); ctx.arc(w.x, w.y, w.r, 0, Math.PI * 2);
-            if(w.waveType === 'fear') {
-                ctx.strokeStyle = `rgba(231, 76, 60, ${1 - w.r/w.maxR})`; 
-                ctx.lineWidth = 10;
-            } else {
+            if(w.waveType === 'seeker') {
+                ctx.beginPath(); ctx.arc(w.x, w.y, w.r, 0, Math.PI * 2);
                 ctx.strokeStyle = `rgba(52, 152, 219, ${1 - w.r/w.maxR})`; 
-                ctx.lineWidth = 4;
+                ctx.lineWidth = 4; ctx.stroke();
             }
-            ctx.stroke();
         });
 
         for(let id in players) {
             let p = players[id];
-            let isMe = (id === myId);
             if(p.isCaptured) {
-                if(isMe) drawStatue(p.x, p.y, "rgba(255,255,255,0.6)", false, true, false, true, 0);
+                if(id === myId) drawStatue(p.x, p.y, "rgba(255,255,255,0.6)", false, true, false, true, 0);
                 continue;
             }
             if(p.team === 'hider') {
                 let baseColor = p.isMoving ? "#333" : "#555"; 
-                let color = (isMe || me.team !== 'seeker') && p.fear > 80 ? "#962d22" : baseColor;
-                drawStatue(p.x, p.y, color, p.fear >= 100, isMe, p.isMoving, false, p.fear);
+                let color = (id === myId || me.team !== 'seeker') && p.fear > 80 ? "#962d22" : baseColor;
+                drawStatue(p.x, p.y, color, p.fear >= 100, (id===myId), p.isMoving, false, p.fear);
             } else { drawSeeker(p); }
         }
         ctx.restore();
+
+        // APPLIQUER LA LUMIÈRE
         drawLighting(me);
 
-        // Dessiner les ondes de PEUR par-dessus la lumière si elles sont émises depuis un buisson
+        // DESSINER LES ONDES DE PEUR APRÈS LA LUMIÈRE (POUR QU'ELLES SOIENT VISIBLES DANS LE NOIR)
         ctx.save(); ctx.translate(camX, camY);
         waves.forEach(w => {
             if(w.waveType === 'fear') {
-                let owner = players[w.owner];
-                // Si l'émetteur était dans un buisson au moment de l'émission, on rend l'onde "lumineuse" (visible hors lampe)
-                if(owner && owner.inBush) {
-                    ctx.beginPath(); ctx.arc(w.x, w.y, w.r, 0, Math.PI * 2);
-                    ctx.strokeStyle = `rgba(255, 0, 0, ${1 - w.r/w.maxR})`; 
-                    ctx.lineWidth = 12; ctx.stroke();
-                }
+                ctx.beginPath(); ctx.arc(w.x, w.y, w.r, 0, Math.PI * 2);
+                // Si l'onde vient d'un buisson, elle est ultra-rouge et épaisse
+                ctx.strokeStyle = `rgba(255, 0, 0, ${1 - w.r/w.maxR})`; 
+                ctx.lineWidth = 10;
+                ctx.stroke();
             }
         });
         ctx.restore();
@@ -497,11 +489,16 @@
             if(!statues.some(st => Math.sqrt((x-st.x)**2 + (y-st.y)**2) < 65)) statues.push({x, y});
         }
 
-        // Génération Buissons
-        let bushCount = mapSizeKey === 'S' ? 40 : mapSizeKey === 'M' ? 80 : 120;
-        while(bushes.length < bushCount) {
-            let x = 100 + pseudoRand() * (mapW - 200), y = 100 + pseudoRand() * (mapH - 200);
-            if(!bushes.some(b => Math.sqrt((x-b.x)**2 + (y-b.y)**2) < 100)) bushes.push({x, y, r: 60});
+        // Génération Buissons : 3 pour S, 4 pour M, 5 pour L
+        let bushLimit = mapSizeKey === 'S' ? 3 : mapSizeKey === 'M' ? 4 : 5;
+        let attempts = 0;
+        while(bushes.length < bushLimit && attempts < 500) {
+            attempts++;
+            let x = 300 + pseudoRand() * (mapW - 600), y = 300 + pseudoRand() * (mapH - 600);
+            // Vérification distance entre buissons (min 400px)
+            if(!bushes.some(b => Math.sqrt((x-b.x)**2 + (y-b.y)**2) < 400)) {
+                bushes.push({x, y, r: 80});
+            }
         }
     }
 
