@@ -470,22 +470,23 @@
         }
         ctx.restore();
 
-        // Éclairage Fixé
+        // Éclairage (Le Noir)
         ctx.save();
         if(me.team === 'seeker' && !me.isCaptured) {
             ctx.fillStyle = "black";
             ctx.beginPath();
-            // Le rectangle couvre tout l'écran
-            ctx.rect(0,0, canvas.width, canvas.height);
+            ctx.rect(0, 0, canvas.width, canvas.height); // Masque global
             
-            // Le cercle d'aura (on dessine à l'envers pour soustraire)
-            ctx.arc(canvas.width/2+12, canvas.height/2+12, 45, 0, Math.PI * 2, true);
+            // On soustrait les zones visibles
+            // 1. L'aura du cube
+            ctx.moveTo(canvas.width/2 + 12 + 45, canvas.height/2 + 12);
+            ctx.arc(canvas.width/2 + 12, canvas.height/2 + 12, 45, 0, Math.PI * 2, true);
             
-            // La lampe de poche (soustraire aussi)
+            // 2. Le cône de la lampe
             if(gameState === "HUNT") {
-                ctx.moveTo(canvas.width/2+12, canvas.height/2+12);
-                ctx.arc(canvas.width/2+12, canvas.height/2+12, 550, me.angle-0.55, me.angle+0.55, false);
-                ctx.lineTo(canvas.width/2+12, canvas.height/2+12);
+                ctx.moveTo(canvas.width/2 + 12, canvas.height/2 + 12);
+                ctx.arc(canvas.width/2 + 12, canvas.height/2 + 12, 550, me.angle - 0.55, me.angle + 0.55, true);
+                ctx.lineTo(canvas.width/2 + 12, canvas.height/2 + 12);
             }
             ctx.fill();
         } else if(me.team === 'hider' && !me.isCaptured) {
