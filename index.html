@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Statu Hunt - Fixed Bush Sync</title>
+    <title>Statu Hunt - Immersive UI</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         body { margin: 0; background: #0a0a0a; color: white; font-family: 'Segoe UI', sans-serif; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; }
@@ -21,6 +21,19 @@
         canvas { position: absolute; top: 0; left: 0; display: none; background: #000; }
         #ui-game { position: absolute; top: 20px; left: 20px; z-index: 50; display: none; pointer-events: none; width: calc(100% - 40px); }
         #game-status { color: #f1c40f; font-weight: bold; font-size: 1.8rem; text-shadow: 3px 3px 5px #000; }
+        
+        /* Nouveaux styles pour les overlays de début */
+        #game-overlay { 
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+            display: flex; flex-direction: column; justify-content: center; align-items: center; 
+            z-index: 1000; pointer-events: none; background: transparent; transition: opacity 1s;
+        }
+        .text-pulse { font-size: 3rem; font-weight: bold; color: #f1c40f; text-shadow: 0 0 20px rgba(241, 196, 15, 0.5); animation: pulse 2s infinite; text-align: center; }
+        .text-alert { font-size: 3rem; font-weight: bold; color: #e74c3c; text-shadow: 0 0 20px rgba(231, 76, 60, 0.5); animation: fadeInOut 4s forwards; text-align: center; }
+        
+        @keyframes pulse { 0% { transform: scale(0.95); opacity: 0.7; } 50% { transform: scale(1.05); opacity: 1; } 100% { transform: scale(0.95); opacity: 0.7; } }
+        @keyframes fadeInOut { 0% { opacity: 0; transform: translateY(-20px); } 20% { opacity: 1; transform: translateY(0); } 80% { opacity: 1; } 100% { opacity: 0; } }
+
         .fear-bar-container { width: 300px; background: rgba(0,0,0,0.7); padding: 12px; border-radius: 10px; margin-top: 10px; }
         .fear-bar { width: 100%; height: 15px; background: #222; border-radius: 10px; overflow: hidden; margin-top: 8px; }
         #fear-fill { width: 0%; height: 100%; background: linear-gradient(90deg, #e74c3c, #ff4d4d); }
@@ -30,6 +43,7 @@
     </style>
 </head>
 <body>
+
     <div id="lobby">
         <h1 style="color: #f1c40f; letter-spacing: 3px;">STATU HUNT</h1>
         <div id="step-pseudo">
@@ -74,6 +88,8 @@
         <p id="victory-desc" style="font-style: italic; color: #bdc3c7;"></p>
         <button id="backToLobbyBtn" class="btn-green" onclick="requestBackToLobby()" style="display:none;">RETOUR LOBBY</button>
     </div>
+
+    <div id="game-overlay"></div>
 
     <div id="ui-game">
         <div id="game-status"></div>
@@ -177,9 +193,7 @@
                 document.getElementById('size-' + data.size).classList.add('active');
             }
             if(data.type === 'START') { 
-                players = data.players; 
-                statues = data.statues;
-                bushes = data.bushes;
+                players = data.players; statues = data.statues; bushes = data.bushes;
                 startClientGame(); 
             }
             if(data.type === 'END') showEndScreen(data.winner, data.reason);
@@ -251,9 +265,22 @@
     }
 
     function startClientGame() {
+        const me = players[myId];
         document.getElementById('lobby').style.display = 'none';
         document.getElementById('end-screen').style.display = 'none';
         document.getElementById('ui-game').style.display = 'block';
+        const overlay = document.getElementById('game-overlay');
+        overlay.style.opacity = 1;
+        overlay.innerHTML = '';
+
+        // Initialisation de l'UI de début
+        if(me.team === 'seeker') {
+            overlay.innerHTML = '<div class="text-pulse">LA CHASSE COMMENCE BIENTÔT...</div>';
+        } else {
+            overlay.innerHTML = '<div class="text-alert">COURREZ ! LES CHASSEURS ARRIVENT !</div>';
+            setTimeout(() => overlay.style.opacity = 0, 4000);
+        }
+
         canvas.style.display = 'block';
         canvas.width = window.innerWidth; canvas.height = window.innerHeight;
         waves.length = 0; detectionArrows.length = 0;
@@ -265,7 +292,10 @@
             if(!gameActive) return;
             if(gameState === "PREP") {
                 prepTimer--; document.getElementById('game-status').innerText = "PRÉPARATION : " + prepTimer + "s";
-                if(prepTimer <= 0) gameState = "HUNT";
+                if(prepTimer <= 0) {
+                    gameState = "HUNT";
+                    overlay.style.opacity = 0;
+                }
             } else {
                 gameDuration--; let m = Math.floor(gameDuration/60), s = gameDuration%60;
                 document.getElementById('game-status').innerText = "TEMPS : " + `${m}:${s<10?'0'+s:s}`;
@@ -373,7 +403,6 @@
         ctx.strokeStyle = "#f1c40f"; ctx.lineWidth = 10; ctx.strokeRect(0,0, mapW, mapH);
         ctx.fillStyle = "#111"; ctx.fillRect(0,0, mapW, mapH);
         
-        // Buissons (Avant la lumière pour être vus de tous)
         bushes.forEach(b => {
             ctx.fillStyle = "#0a2b0a"; ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI*2); ctx.fill();
             ctx.strokeStyle = "#1a3d1a"; ctx.lineWidth = 5; ctx.stroke();
@@ -405,7 +434,6 @@
 
         drawLighting(me);
 
-        // Ondes de PEUR (Après la lumière pour percer l'obscurité)
         ctx.save(); ctx.translate(camX, camY);
         waves.forEach(w => {
             if(w.waveType === 'fear') {
@@ -458,7 +486,7 @@
         } else if(me.team === 'seeker') {
             ctx.fillStyle = "black"; ctx.beginPath(); ctx.rect(0,0, canvas.width, canvas.height);
             if(gameState === "HUNT") { ctx.moveTo(canvas.width/2+12, canvas.height/2+12); ctx.arc(canvas.width/2+12, canvas.height/2+12, 550, me.angle-0.55, me.angle+0.55); ctx.fill("evenodd"); }
-            else { ctx.fill(); }
+            else { ctx.fill(); } // Écran noir total pour le chercheur en PREP
         } else {
             let g = ctx.createRadialGradient(canvas.width/2, canvas.height/2, 100, canvas.width/2, canvas.height/2, canvas.width);
             g.addColorStop(0, "transparent"); g.addColorStop(1, "rgba(0,0,0,0.85)");
@@ -480,31 +508,28 @@
     function generateMapForHost() {
         let seed = 0; for(let i=0; i<roomCode.length; i++) seed += roomCode.charCodeAt(i);
         const pseudoRand = () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; };
-        
         statues = [];
         let count = mapSizeKey === 'S' ? 180 : mapSizeKey === 'M' ? 360 : 540;
         while(statues.length < count) {
             let x = 100 + pseudoRand() * (mapW - 200), y = 100 + pseudoRand() * (mapH - 200);
             if(!statues.some(st => Math.sqrt((x-st.x)**2 + (y-st.y)**2) < 65)) statues.push({x, y});
         }
-
         bushes = [];
         let bushLimit = mapSizeKey === 'S' ? 3 : mapSizeKey === 'M' ? 4 : 5;
         let attempts = 0;
         while(bushes.length < bushLimit && attempts < 1000) {
             attempts++;
             let x = 300 + pseudoRand() * (mapW - 600), y = 300 + pseudoRand() * (mapH - 600);
-            if(!bushes.some(b => Math.sqrt((x-b.x)**2 + (y-b.y)**2) < 400)) {
-                bushes.push({x, y, r: 80});
-            }
+            if(!bushes.some(b => Math.sqrt((x-b.x)**2 + (y-b.y)**2) < 400)) { bushes.push({x, y, r: 80}); }
         }
     }
 
     function showEndScreen(w, r) {
         gameActive = false; clearInterval(logicInterval); clearInterval(masterTimer);
         document.getElementById('ui-game').style.display = 'none';
+        document.getElementById('game-overlay').style.opacity = 0;
         document.getElementById('end-screen').style.display = 'block';
-        document.getElementById('victory-title').innerText = (w === 'seekers') ? "L'INTRUS A GAGNÉ" : "LES STATUES ONT SURVÉCU";
+        document.getElementById('victory-title').innerText = (w === 'seekers') ? "LES INTRUS ONT ÉTÉ TROUVÉS" : "LES STATUES ONT SURVÉCU";
         document.getElementById('victory-desc').innerText = r;
     }
 
@@ -513,6 +538,7 @@
     function resetToLobby() { 
         gameActive = false; clearInterval(logicInterval); clearInterval(masterTimer);
         canvas.style.display = 'none'; document.getElementById('end-screen').style.display = 'none'; 
+        document.getElementById('game-overlay').style.opacity = 0;
         document.getElementById('lobby').style.display = 'block'; 
         for(let id in players) { players[id].isCaptured = false; players[id].fear = 0; players[id].inBush = false; }
         let timeParts = document.getElementById('timerSetting').innerText.split(':');
@@ -523,13 +549,8 @@
     function requestStart() { 
         if(isHost) { 
             randomizeSpawns(); 
-            generateMapForHost(); // On génère tout une fois sur le serveur
-            broadcast({
-                type: 'START', 
-                players: players, 
-                statues: statues, 
-                bushes: bushes
-            }); 
+            generateMapForHost(); 
+            broadcast({ type: 'START', players: players, statues: statues, bushes: bushes }); 
             setTimeout(startClientGame, 200); 
         } 
     }
