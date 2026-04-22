@@ -470,26 +470,25 @@
         }
         ctx.restore();
 
-        // Éclairage Fixé
+        // Éclairage (Corrected Mask)
         ctx.save();
         if(me.team === 'seeker' && !me.isCaptured) {
-            // Création du masque noir
             ctx.fillStyle = "black";
             ctx.beginPath();
+            // Le rectangle global est dessiné normalement (sens horaire)
             ctx.rect(0, 0, canvas.width, canvas.height);
 
             if(gameState === "HUNT") {
-                // 1. Cercle de visibilité autour du chercheur
+                // Les trous (aura + lampe) sont dessinés ANTI-HORAIRE (true) pour percer le rect
+                // 1. Aura
                 ctx.moveTo(canvas.width/2 + 12 + 60, canvas.height/2 + 12);
                 ctx.arc(canvas.width/2 + 12, canvas.height/2 + 12, 60, 0, Math.PI * 2, true);
 
-                // 2. Cône de la lampe
+                // 2. Lampe
                 ctx.moveTo(canvas.width/2 + 12, canvas.height/2 + 12);
                 ctx.arc(canvas.width/2 + 12, canvas.height/2 + 12, 550, me.angle - 0.55, me.angle + 0.55, true);
                 ctx.lineTo(canvas.width/2 + 12, canvas.height/2 + 12);
             }
-            // Si c'est PREP, on ne dessine aucune excavation (donc tout reste noir)
-            
             ctx.fill();
         } else if(me.team === 'hider' && !me.isCaptured) {
             let g = ctx.createRadialGradient(canvas.width/2, canvas.height/2, 100, canvas.width/2, canvas.height/2, canvas.width);
