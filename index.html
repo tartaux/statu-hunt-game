@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Statu Hunt - Final Vision Fix</title>
+    <title>Statu Hunt - Full Logic Restored</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         body { margin: 0; background: #0a0a0a; color: white; font-family: 'Segoe UI', sans-serif; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; }
@@ -13,17 +13,15 @@
         .btn-blue { background: #3498db; color: white; box-shadow: 0 4px #2980b9; }
         .btn-red { background: #e74c3c; color: white; box-shadow: 0 4px #c0392b; }
         .btn-green { background: #27ae60; color: white; width: 100%; margin-top: 15px; font-size: 1.1rem; box-shadow: 0 4px #1e8449; }
-        button:disabled { background: #7f8c8d !important; box-shadow: 0 4px #95a5a6 !important; cursor: not-allowed; opacity: 0.6; }
         .config-box { background: rgba(0,0,0,0.3); padding: 15px; border-radius: 8px; margin: 10px 0; }
         .teams { display: flex; gap: 15px; margin-top: 20px; }
         .team-box { flex: 1; background: #1a252f; padding: 10px; border-radius: 10px; min-height: 150px; border: 1px solid #34495e; }
-        .player-tag { background: rgba(52, 152, 219, 0.1); padding: 8px; margin: 5px 0; border-radius: 6px; font-size: 0.9rem; border-left: 4px solid #f1c40f; text-align: left; }
+        .player-tag { background: rgba(52, 152, 219, 0.1); padding: 8px; margin: 5px 0; border-radius: 6px; font-size: 0.9rem; border-left: 4px solid #f1c40f; }
         canvas { position: absolute; top: 0; left: 0; display: none; background: #000; }
         #ui-game { position: absolute; top: 20px; left: 20px; z-index: 50; display: none; pointer-events: none; width: calc(100% - 40px); }
         #game-status { color: #f1c40f; font-weight: bold; font-size: 1.8rem; text-shadow: 3px 3px 5px #000; }
-        #game-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 1000; pointer-events: none; background: transparent; transition: opacity 1s; }
-        .text-pulse { font-size: 3rem; font-weight: bold; color: #f1c40f; text-shadow: 0 0 20px rgba(241, 196, 15, 0.5); animation: pulse 2s infinite; text-align: center; }
-        .text-alert { font-size: 3rem; font-weight: bold; color: #e74c3c; text-shadow: 0 0 20px rgba(231, 76, 60, 0.5); animation: fadeInOut 4s forwards; text-align: center; }
+        #game-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 1000; pointer-events: none; background: transparent; transition: background 0.5s; }
+        .text-pulse { font-size: 3rem; font-weight: bold; color: #f1c40f; text-shadow: 0 0 20px rgba(241, 196, 15, 0.5); animation: pulse 2s infinite; }
         .fear-bar-container { width: 300px; background: rgba(0,0,0,0.7); padding: 12px; border-radius: 10px; margin-top: 10px; }
         .fear-bar { width: 100%; height: 15px; background: #222; border-radius: 10px; overflow: hidden; margin-top: 8px; }
         #fear-fill { width: 0%; height: 100%; background: linear-gradient(90deg, #e74c3c, #ff4d4d); }
@@ -33,39 +31,30 @@
 <body>
 
     <div id="lobby">
-        <h1 style="color: #f1c40f; letter-spacing: 3px;">STATU HUNT</h1>
+        <h1 style="color: #f1c40f;">STATU HUNT</h1>
         <div id="step-pseudo">
-            <input type="text" id="pseudoInput" placeholder="NOM DU JOUEUR..." maxlength="15">
-            <br><button class="btn-blue" onclick="confirmPseudo()">REJOINDRE</button>
+            <input type="text" id="pseudoInput" placeholder="PSEUDO..." maxlength="15">
+            <br><button class="btn-blue" onclick="confirmPseudo()">VALIDER</button>
         </div>
         <div id="step-menu" class="hidden">
-            <button class="btn-blue" onclick="createRoom()">CRÉER SALLE</button>
-            <p>— OU —</p>
+            <button class="btn-blue" onclick="createRoom()">CRÉER</button>
             <input type="text" id="joinInput" placeholder="CODE">
-            <br><button class="btn-blue" onclick="joinRoom()">REJOINDRE SALLE</button>
+            <button class="btn-blue" onclick="joinRoom()">REJOINDRE</button>
         </div>
         <div id="step-room" class="hidden">
-            <div style="background: rgba(0,0,0,0.3); padding: 10px; border-radius: 8px;">
-                CODE : <span id="displayCode" style="color:#f1c40f; font-weight: bold; font-size: 1.2rem;">---</span>
-                <button id="copyBtn" class="btn-blue" style="font-size: 0.7rem; padding: 5px 10px; margin-left: 10px;" onclick="copyCode()">COPIER</button>
-            </div>
-            <div class="config-box">
-                DURÉE : <button class="btn-blue" onclick="changeTimer(-30)">-</button>
-                <span id="timerSetting" style="margin: 0 10px; font-weight: bold;">2:00</span>
-                <button class="btn-blue" onclick="changeTimer(30)">+</button>
-            </div>
+            <div class="config-box">CODE: <span id="displayCode" style="color:#f1c40f;">---</span></div>
             <div class="teams">
-                <div class="team-box"><h4>CHERCHEURS</h4><button onclick="selectTeam('seeker')" class="btn-blue" style="font-size: 0.7rem;">REJOINDRE</button><div id="list-seekers"></div></div>
-                <div class="team-box"><h4>CACHÉS</h4><button onclick="selectTeam('hider')" class="btn-red" style="font-size: 0.7rem;">REJOINDRE</button><div id="list-hiders"></div></div>
+                <div class="team-box"><h4>CHERCHEURS</h4><button onclick="selectTeam('seeker')" class="btn-blue">JOIN</button><div id="list-seekers"></div></div>
+                <div class="team-box"><h4>CACHÉS</h4><button onclick="selectTeam('hider')" class="btn-red">JOIN</button><div id="list-hiders"></div></div>
             </div>
-            <button id="startBtn" class="hidden btn-green" onclick="requestStart()" disabled>LANCER LA PARTIE</button>
+            <button id="startBtn" class="hidden btn-green" onclick="requestStart()" disabled>LANCER</button>
         </div>
     </div>
 
     <div id="end-screen">
-        <h2 id="victory-title">FIN</h2>
+        <h2 id="victory-title"></h2>
         <p id="victory-desc"></p>
-        <button id="backToLobbyBtn" class="btn-green" onclick="requestBackToLobby()" style="display:none;">RETOUR LOBBY</button>
+        <button class="btn-green" onclick="location.reload()">RETOUR</button>
     </div>
 
     <div id="game-overlay"></div>
@@ -79,166 +68,91 @@
 
 <script>
     let myPseudo, myId, isHost = false, players = {}, peer, connections = [], hostConn = null, gameActive = false, roomCode = "";
-    let gameState = "PREP", prepTimer = 10, gameDuration = 120;
-    let lastUpdate = Date.now(), logicInterval, masterTimer;
-    let mapW = 2000, mapH = 2000;
-    
+    let gameState = "PREP", prepTimer = 10, gameDuration = 120, lastUpdate = Date.now(), logicInterval, masterTimer;
+    let mapW = 2000, mapH = 2000, statues = [], bushes = [], keys = {}, mousePos = { x: 0, y: 0 };
+    const waves = [];
+    let lastShockwave = 0, detectionArrows = [], fearSpamCounter = 0;
+
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
     const vCanvas = document.createElement('canvas'); 
     const vCtx = vCanvas.getContext('2d');
 
-    let statues = [], bushes = [], keys = {}, mousePos = { x: 0, y: 0 };
-    const waves = [];
-    let lastShockwave = 0, detectionArrows = [], fearSpamCounter = 0;
-
-    function confirmPseudo() {
-        myPseudo = document.getElementById('pseudoInput').value.trim();
-        if(myPseudo) { document.getElementById('step-pseudo').classList.add('hidden'); document.getElementById('step-menu').classList.remove('hidden'); }
-    }
-
-    function copyCode() {
-        navigator.clipboard.writeText(roomCode).then(() => {
-            const btn = document.getElementById('copyBtn');
-            btn.innerText = "COPIÉ !";
-            setTimeout(() => btn.innerText = "COPIER", 2000);
-        });
-    }
-
-    function createRoom() {
-        isHost = true;
-        roomCode = Math.random().toString(36).substring(2, 7).toUpperCase();
-        setupPeer('SH-' + roomCode); 
-        showRoom(roomCode);
-        document.getElementById('startBtn').classList.remove('hidden');
-        document.getElementById('backToLobbyBtn').style.display = 'block';
-    }
-
-    function joinRoom() {
-        isHost = false;
-        roomCode = document.getElementById('joinInput').value.toUpperCase().trim();
-        setupPeer();
-        setTimeout(() => { 
-            hostConn = peer.connect('SH-' + roomCode); 
-            initConn(hostConn); 
-        }, 800);
-        showRoom(roomCode);
-    }
+    function confirmPseudo() { myPseudo = document.getElementById('pseudoInput').value.trim(); if(myPseudo) { document.getElementById('step-pseudo').classList.add('hidden'); document.getElementById('step-menu').classList.remove('hidden'); } }
+    function createRoom() { isHost = true; roomCode = Math.random().toString(36).substring(2, 7).toUpperCase(); setupPeer('SH-' + roomCode); showRoom(roomCode); document.getElementById('startBtn').classList.remove('hidden'); }
+    function joinRoom() { roomCode = document.getElementById('joinInput').value.toUpperCase().trim(); setupPeer(); setTimeout(() => { hostConn = peer.connect('SH-' + roomCode); initConn(hostConn); }, 800); showRoom(roomCode); }
 
     function setupPeer(id = null) {
-        if (peer) peer.destroy();
         peer = new Peer(id);
-        peer.on('open', (i) => {
-            myId = i;
-            players[myId] = {pseudo: myPseudo, team: null, x: 1000, y: 1000, angle: 0, fear: 0, isMoving: false, isCaptured: false, inBush: false};
-            refreshUI();
-        });
-        peer.on('connection', (c) => {
-            connections.push(c);
-            initConn(c);
-            if(isHost) {
-                setTimeout(() => { 
-                    c.send({type:'SYNC', players: players}); 
-                    c.send({type:'SYNC_TIMER', duration: gameDuration});
-                }, 500);
-            }
-        });
+        peer.on('open', (i) => { myId = i; players[myId] = {pseudo: myPseudo, team: null, x: 1000, y: 1000, angle: 0, fear: 0, isMoving: false, isCaptured: false, inBush: false}; refreshUI(); });
+        peer.on('connection', (c) => { connections.push(c); initConn(c); });
     }
 
     function initConn(c) {
         c.on('data', (data) => {
-            if(data.type === 'JOIN') { 
-                players[c.peer] = {pseudo: data.pseudo, team: null, x: 1000, y: 1000, angle: 0, fear: 0, isMoving: false, isCaptured: false, inBush: false}; 
-                if(isHost) broadcast({type:'SYNC', players: players}); 
-            }
+            if(data.type === 'JOIN') { players[c.peer] = {pseudo: data.pseudo, team: null, x: 1000, y: 1000, angle: 0, fear: 0, isMoving: false, isCaptured: false, inBush: false}; if(isHost) broadcast({type:'SYNC', players: players}); }
             if(data.type === 'SYNC') { players = data.players; refreshUI(); }
-            if(data.type === 'SYNC_TIMER') { gameDuration = data.duration; let m = Math.floor(gameDuration/60), s = gameDuration%60; document.getElementById('timerSetting').innerText = `${m}:${s<10?'0'+s:s}`; }
-            if(data.type === 'START') { 
-                statues = data.statues; bushes = data.bushes; 
-                for(let id in data.playerStarts) { if(players[id]) { players[id].x = data.playerStarts[id].x; players[id].y = data.playerStarts[id].y; players[id].isCaptured = false; players[id].fear = 0; } }
-                startClientGame(); 
-            }
+            if(data.type === 'START') { statues = data.statues; bushes = data.bushes; startClientGame(); }
+            if(data.type === 'POS') { if(players[data.id]) Object.assign(players[data.id], data); }
+            if(data.type === 'SHOCKWAVE') { waves.push({...data, r: 0}); }
+            if(data.type === 'CAPTURE') { if(players[data.targetId]) { players[data.targetId].isCaptured = true; if(isHost) checkWinCondition(); } }
+            if(data.type === 'FEAR_HIT' && data.targetId === myId) { players[myId].fear = Math.min(100, players[myId].fear + 15); }
             if(data.type === 'END') showEndScreen(data.winner, data.reason);
-            if(data.type === 'BACK_LOBBY') resetToLobby();
-            if(data.type === 'POS') { if(players[data.id]) { players[data.id].x = data.x; players[data.id].y = data.y; players[data.id].angle = data.angle; players[data.id].isMoving = data.isMoving; players[data.id].fear = data.fear; players[data.id].isCaptured = data.isCaptured; players[data.id].inBush = data.inBush; } }
-            if(data.type === 'CAPTURE') { if(players[data.targetId]) { players[data.targetId].isCaptured = true; if(isHost) { broadcast({type: 'SYNC', players: players}); checkWinCondition(); } } }
         });
         if(!isHost && c === hostConn) c.on('open', () => c.send({type: 'JOIN', pseudo: myPseudo}));
     }
 
-    function broadcast(data) { connections.forEach(c => { if(c.open) c.send(data); }); }
-
-    function selectTeam(t) {
-        players[myId].team = t; refreshUI();
-        if(isHost) broadcast({type: 'SYNC', players: players});
-        else if(hostConn?.open) hostConn.send({type: 'SYNC', players: players});
-    }
+    function broadcast(data) { connections.forEach(c => c.open && c.send(data)); }
+    function selectTeam(t) { players[myId].team = t; refreshUI(); if(isHost) broadcast({type: 'SYNC', players: players}); else hostConn?.send({type: 'JOIN', pseudo: myPseudo, team: t}); }
 
     function refreshUI() {
         const sDiv = document.getElementById('list-seekers'), hDiv = document.getElementById('list-hiders');
-        if(!sDiv) return;
         sDiv.innerHTML = ''; hDiv.innerHTML = '';
-        let sCount = 0, hCount = 0;
+        let s=0, h=0;
         for(let id in players) {
             let p = players[id], tag = `<div class="player-tag">${p.pseudo}</div>`;
-            if(p.team === 'seeker') { sCount++; sDiv.innerHTML += tag; }
-            if(p.team === 'hider') { hCount++; hDiv.innerHTML += tag; }
+            if(p.team === 'seeker') { s++; sDiv.innerHTML += tag; }
+            if(p.team === 'hider') { h++; hDiv.innerHTML += tag; }
         }
-        if(isHost) document.getElementById('startBtn').disabled = !(sCount > 0 && hCount > 0);
+        if(isHost) document.getElementById('startBtn').disabled = !(s>0 && h>0);
     }
 
-    function changeTimer(v) { if(isHost) { gameDuration = Math.max(60, gameDuration + v); let m = Math.floor(gameDuration/60), s = gameDuration%60; document.getElementById('timerSetting').innerText = `${m}:${s<10?'0'+s:s}`; broadcast({type: 'SYNC_TIMER', duration: gameDuration}); } }
-
     function startClientGame() {
-        const me = players[myId];
         document.getElementById('lobby').style.display = 'none';
-        document.getElementById('end-screen').style.display = 'none';
-        document.getElementById('ui-game').style.display = 'block';
-        const overlay = document.getElementById('game-overlay');
-        overlay.style.opacity = 1;
-        overlay.innerHTML = me.team === 'seeker' ? '<div class="text-pulse">LA CHASSE COMMENCE...</div>' : '<div class="text-alert">CACHEZ-VOUS !</div>';
-        if(me.team !== 'seeker') setTimeout(() => overlay.style.opacity = 0, 4000);
-        
         canvas.style.display = 'block';
-        canvas.width = vCanvas.width = window.innerWidth;
-        canvas.height = vCanvas.height = window.innerHeight;
-
-        gameActive = true; gameState = "PREP"; prepTimer = 10; lastUpdate = Date.now();
-        clearInterval(logicInterval); clearInterval(masterTimer);
+        document.getElementById('ui-game').style.display = 'block';
+        gameActive = true; gameState = "PREP"; prepTimer = 10;
         logicInterval = setInterval(update, 1000/60);
         masterTimer = setInterval(() => {
-            if(!gameActive) return;
             if(gameState === "PREP") {
-                prepTimer--; document.getElementById('game-status').innerText = "PRÉPARATION : " + prepTimer + "s";
-                if(prepTimer <= 0) { gameState = "HUNT"; overlay.style.opacity = 0; }
+                prepTimer--; if(prepTimer <= 0) gameState = "HUNT";
+                document.getElementById('game-status').innerText = "PRÉPARATION: " + prepTimer + "s";
             } else {
-                gameDuration--; let m = Math.floor(gameDuration/60), s = gameDuration%60;
-                document.getElementById('game-status').innerText = "TEMPS : " + `${m}:${s<10?'0'+s:s}`;
-                if(gameDuration <= 0 && isHost) { broadcast({type: 'END', winner: 'hiders', reason: "Temps écoulé !"}); showEndScreen('hiders', "Temps écoulé !"); }
+                gameDuration--; document.getElementById('game-status').innerText = "TEMPS: " + Math.floor(gameDuration/60) + ":" + (gameDuration%60).toString().padStart(2,'0');
+                if(gameDuration <= 0 && isHost) broadcast({type:'END', winner:'hiders', reason:'Temps écoulé !'});
             }
         }, 1000);
         requestAnimationFrame(draw);
     }
 
     function update() {
-        const me = players[myId];
-        if(!me || !gameActive) return;
-        const now = Date.now(), dt = (now - lastUpdate) / 16.66;
-        lastUpdate = now;
+        const me = players[myId]; if(!me || !gameActive) return;
+        const dt = (Date.now() - lastUpdate) / 16.66; lastUpdate = Date.now();
+        
         let moved = false;
         if(!(me.team === 'seeker' && gameState === "PREP")) {
             let spd = (me.isCaptured ? 8 : (me.team === 'seeker' ? 6 : 4.5)) * dt;
             if(keys['z'] || keys['w']) { me.y -= spd; moved = true; }
             if(keys['s']) { me.y += spd; moved = true; }
-            if(keys['q'] || keys['a']) { me.x -= spd; moved = true; }
+            if(keys['a'] || keys['q']) { me.x -= spd; moved = true; }
             if(keys['d']) { me.x += spd; moved = true; }
         }
         me.isMoving = moved;
-        me.x = Math.max(15, Math.min(mapW - 35, me.x));
-        me.y = Math.max(15, Math.min(mapH - 35, me.y));
-        
+        me.x = Math.max(0, Math.min(mapW-25, me.x));
+        me.y = Math.max(0, Math.min(mapH-25, me.y));
+
         let inBush = false;
-        for(let bush of bushes) { if(Math.sqrt((me.x+12 - bush.x)**2 + (me.y+12 - bush.y)**2) < bush.r) { inBush = true; break; } }
+        for(let b of bushes) if(Math.sqrt((me.x+12-b.x)**2 + (me.y+12-b.y)**2) < b.r) inBush = true;
         me.inBush = inBush;
 
         if(me.team === 'seeker') {
@@ -246,114 +160,157 @@
             if(gameState === "HUNT") {
                 for(let id in players) {
                     let p = players[id];
-                    if(id !== myId && p.team === 'hider' && !p.isCaptured && Math.sqrt((me.x - p.x)**2 + (me.y - p.y)**2) < 40) {
-                        if(isHost) { players[id].isCaptured = true; broadcast({type: 'SYNC', players: players}); checkWinCondition(); }
-                        else if(hostConn?.open) hostConn.send({type: 'CAPTURE', targetId: id});
+                    if(p.team === 'hider' && !p.isCaptured && Math.sqrt((me.x-p.x)**2+(me.y-p.y)**2) < 40) {
+                        if(isHost) { players[id].isCaptured = true; broadcast({type:'SYNC', players:players}); checkWinCondition(); }
+                        else hostConn?.send({type:'CAPTURE', targetId: id});
                     }
                 }
             }
         } else if(gameState === "HUNT" && !me.isCaptured) {
-            if(me.inBush) me.fear = 100; else { if(!moved) me.fear = Math.min(100, me.fear + 0.4 * dt); else me.fear = Math.max(0, me.fear - 1.2 * dt); }
+            if(me.inBush) me.fear = 100;
+            else { if(!moved) me.fear = Math.min(100, me.fear + 0.3 * dt); else me.fear = Math.max(0, me.fear - 1 * dt); }
+            
+            if(me.fear >= 100) {
+                fearSpamCounter += dt;
+                if(fearSpamCounter > 30) {
+                    fearSpamCounter = 0;
+                    let wave = {type:'SHOCKWAVE', x:me.x+12, y:me.y+12, owner:myId, maxR:150, waveType:'fear', isBushWave:me.inBush};
+                    waves.push({...wave, r:0}); broadcast(wave);
+                }
+            }
         }
 
-        let sync = {type: 'POS', id: myId, x: me.x, y: me.y, angle: me.angle, fear: me.fear, isMoving: me.isMoving, isCaptured: me.isCaptured, inBush: me.inBush};
-        if(isHost) broadcast(sync); else hostConn?.send(sync);
+        for(let i=waves.length-1; i>=0; i--) {
+            let w = waves[i]; w.r += 10 * dt;
+            if(w.owner === myId && me.team === 'seeker' && w.waveType === 'seeker') {
+                for(let id in players) {
+                    let p = players[id];
+                    if(p.team === 'hider' && !p.isCaptured && !p.inBush && !w['h'+id]) {
+                        if(Math.abs(Math.sqrt((w.x-(p.x+12))**2 + (w.y-(p.y+12))**2) - w.r) < 20) {
+                            w['h'+id] = true; broadcast({type:'FEAR_HIT', targetId: id});
+                            detectionArrows.push({angle: Math.atan2((p.y+12)-(me.y+12), (p.x+12)-(me.x+12)), life: 60});
+                        }
+                    }
+                }
+            }
+            if(w.r > w.maxR) waves.splice(i,1);
+        }
+        for(let i=detectionArrows.length-1; i>=0; i--) { detectionArrows[i].life -= dt; if(detectionArrows[i].life <= 0) detectionArrows.splice(i,1); }
+
+        broadcast({type: 'POS', id: myId, x: me.x, y: me.y, angle: me.angle, fear: me.fear, isMoving: me.isMoving, isCaptured: me.isCaptured, inBush: me.inBush});
     }
 
     function draw() {
         if(!gameActive) return;
         const me = players[myId];
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+        ctx.clearRect(0,0,canvas.width,canvas.height);
+        
         const camX = -me.x + canvas.width/2, camY = -me.y + canvas.height/2;
-
         ctx.save(); ctx.translate(camX, camY);
-        ctx.fillStyle = "#111"; ctx.fillRect(0,0, mapW, mapH);
+        
+        // Map
+        ctx.fillStyle = "#111"; ctx.fillRect(0,0,mapW,mapH);
         bushes.forEach(b => { ctx.fillStyle = "#0a2b0a"; ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI*2); ctx.fill(); });
         statues.forEach(s => { ctx.fillStyle = "#555"; ctx.fillRect(s.x, s.y, 25, 25); });
-        
+
+        // Ondes
+        waves.forEach(w => {
+            ctx.beginPath(); ctx.arc(w.x, w.y, w.r, 0, Math.PI*2);
+            ctx.strokeStyle = w.waveType === 'fear' ? (w.isBushWave ? "#27ae60" : "#e74c3c") : "#3498db";
+            ctx.lineWidth = 3; ctx.stroke();
+        });
+
+        // Joueurs
         for(let id in players) {
             let p = players[id];
             if(p.team === 'seeker') {
-                ctx.save(); ctx.translate(p.x + 12, p.y + 12); ctx.rotate(p.angle);
-                ctx.fillStyle = "#2980b9"; ctx.beginPath(); ctx.roundRect(-15, -15, 30, 30, 5); ctx.fill();
-                ctx.fillStyle = "#ecf0f1"; ctx.fillRect(5, -8, 5, 16); ctx.restore();
+                ctx.save(); ctx.translate(p.x+12, p.y+12); ctx.rotate(p.angle);
+                ctx.fillStyle = "#2980b9"; ctx.fillRect(-15,-15,30,30);
+                ctx.fillStyle = "#fff"; ctx.fillRect(10,-5,10,10); ctx.restore();
             } else {
-                let dist = Math.sqrt((me.x-p.x)**2 + (me.y-p.y)**2);
-                // LOGIQUE VISIBILITÉ CORRIGÉE :
-                // Les hiders voient leurs alliés hiders.
-                // Les seekers voient les hiders comme des statues (#555) SI ils sont dans la lampe (géré par drawLighting).
-                if((me.team === 'hider' && !p.isCaptured) || (me.team === 'seeker' && !p.isCaptured)) {
-                    ctx.fillStyle = (me.team === 'hider' && p.fear > 80) ? "#962d22" : (p.isMoving ? "#333" : "#555");
+                if(p.isCaptured) {
+                    // SKIN ANGE (Spectateur)
+                    ctx.fillStyle = "#fff"; ctx.fillRect(p.x, p.y, 25, 25);
+                    ctx.fillStyle = "#fff"; ctx.fillRect(p.x-10, p.y+5, 10, 10); ctx.fillRect(p.x+25, p.y+5, 10, 10);
+                } else {
+                    // Les hiders voient tout. Les seekers voient des statues grises.
+                    ctx.fillStyle = (me.team === 'hider') ? (p.fear > 80 ? "#c0392b" : "#555") : "#555";
                     ctx.fillRect(p.x, p.y, 25, 25);
                     if(me.team === 'hider') {
-                        ctx.fillStyle = "#2ecc71"; ctx.font = "bold 12px Arial"; ctx.textAlign = "center";
-                        ctx.fillText(p.pseudo, p.x + 12, p.y - 10);
+                        ctx.fillStyle = "#fff"; ctx.font = "12px Arial"; ctx.fillText(p.pseudo, p.x, p.y-5);
                     }
                 }
             }
         }
         ctx.restore();
-        drawLighting(me);
-        if(me.team === 'hider' && !me.isCaptured) { document.getElementById('fear-ui').classList.remove('hidden'); document.getElementById('fear-fill').style.width = me.fear + "%"; } 
+
+        // Lumière et Obscurité
+        if(me.team === 'seeker') {
+            vCanvas.width = canvas.width; vCanvas.height = canvas.height;
+            vCtx.fillStyle = "black"; vCtx.fillRect(0,0,canvas.width,canvas.height);
+            if(gameState === "HUNT") {
+                vCtx.globalCompositeOperation = 'destination-out';
+                vCtx.beginPath(); vCtx.moveTo(canvas.width/2+12, canvas.height/2+12);
+                vCtx.arc(canvas.width/2+12, canvas.height/2+12, 500, me.angle-0.5, me.angle+0.5); vCtx.fill();
+                vCtx.beginPath(); vCtx.arc(canvas.width/2+12, canvas.height/2+12, 60, 0, Math.PI*2); vCtx.fill();
+            }
+            ctx.drawImage(vCanvas, 0,0);
+        }
+
+        // UI
+        if(me.team === 'hider' && !me.isCaptured) {
+            document.getElementById('fear-ui').classList.remove('hidden');
+            document.getElementById('fear-fill').style.width = me.fear + "%";
+        } else {
+            document.getElementById('fear-ui').classList.add('hidden');
+        }
+
+        detectionArrows.forEach(a => {
+            ctx.save(); ctx.translate(canvas.width/2, canvas.height/2); ctx.rotate(a.angle);
+            ctx.fillStyle = "rgba(231, 76, 60, "+(a.life/60)+")";
+            ctx.beginPath(); ctx.moveTo(60, -10); ctx.lineTo(80, 0); ctx.lineTo(60, 10); ctx.fill(); ctx.restore();
+        });
+
         requestAnimationFrame(draw);
     }
 
-    function drawLighting(me) {
-        if (!gameActive) return;
-        vCanvas.width = canvas.width; vCanvas.height = canvas.height;
-        vCtx.fillStyle = "black"; vCtx.fillRect(0, 0, vCanvas.width, vCanvas.height);
-        vCtx.globalCompositeOperation = 'destination-out';
-        
-        if (me.team === 'seeker') {
-            vCtx.beginPath(); vCtx.arc(canvas.width/2 + 12, canvas.height/2 + 12, 50, 0, Math.PI * 2); vCtx.fill();
-            vCtx.beginPath(); vCtx.moveTo(canvas.width/2 + 12, canvas.height/2 + 12);
-            vCtx.arc(canvas.width/2 + 12, canvas.height/2 + 12, 550, me.angle - 0.6, me.angle + 0.6); vCtx.fill();
-        } else {
-            let g = vCtx.createRadialGradient(canvas.width/2, canvas.height/2, 50, canvas.width/2, canvas.height/2, 450);
-            g.addColorStop(0, "white"); g.addColorStop(1, "transparent");
-            vCtx.fillStyle = g; vCtx.beginPath(); vCtx.arc(canvas.width/2, canvas.height/2, 450, 0, Math.PI*2); vCtx.fill();
-        }
-        ctx.drawImage(vCanvas, 0, 0);
+    function requestStart() {
+        generateMap();
+        broadcast({type:'START', statues: statues, bushes: bushes});
+        startClientGame();
+    }
+
+    function generateMap() {
+        statues = []; for(let i=0; i<60; i++) statues.push({x: Math.random()*(mapW-50), y: Math.random()*(mapH-50)});
+        bushes = []; for(let i=0; i<10; i++) bushes.push({x: Math.random()*mapW, y: Math.random()*mapH, r: 80+Math.random()*40});
     }
 
     function checkWinCondition() {
-        let aliveHiders = Object.values(players).filter(p => p.team === 'hider' && !p.isCaptured).length;
-        if(aliveHiders === 0 && gameActive) { broadcast({type: 'END', winner: 'seekers', reason: "Tout le monde a été capturé !"}); showEndScreen('seekers', "L'ombre a tout consumé."); }
+        let alive = Object.values(players).filter(p => p.team === 'hider' && !p.isCaptured).length;
+        if(alive === 0) broadcast({type:'END', winner:'seekers', reason:'Tous capturés !'});
     }
 
     function showEndScreen(w, r) {
         gameActive = false; clearInterval(logicInterval); clearInterval(masterTimer);
-        document.getElementById('ui-game').style.display = 'none'; document.getElementById('end-screen').style.display = 'block';
-        document.getElementById('victory-title').innerText = (w === 'seekers') ? "VICTOIRE CHERCHEURS" : "VICTOIRE CACHÉS";
+        document.getElementById('end-screen').style.display = 'block';
+        document.getElementById('victory-title').innerText = w === 'seekers' ? "VICTOIRE CHERCHEURS" : "VICTOIRE CACHÉS";
         document.getElementById('victory-desc').innerText = r;
     }
 
     function showRoom(c) { document.getElementById('step-menu').classList.add('hidden'); document.getElementById('step-room').classList.remove('hidden'); document.getElementById('displayCode').innerText = c; }
-    function resetToLobby() { gameActive = false; canvas.style.display = 'none'; document.getElementById('end-screen').style.display = 'none'; document.getElementById('lobby').style.display = 'block'; refreshUI(); }
-    function requestBackToLobby() { if(isHost) { broadcast({type: 'BACK_LOBBY'}); resetToLobby(); } }
-
-    function generateMapForHost() {
-        statues = []; for(let x = 100; x < mapW - 100; x += 110) for(let y = 100; y < mapH - 100; y += 110) statues.push({ x: x + Math.random()*50, y: y + Math.random()*50 });
-        bushes = []; while(bushes.length < 8) {
-            let nb = {x: Math.random()*(mapW-400)+200, y: Math.random()*(mapH-400)+200, r: 85};
-            if(!bushes.some(b => Math.sqrt((b.x-nb.x)**2 + (b.y-nb.y)**2) < 400)) bushes.push(nb);
-        }
-    }
-
-    function requestStart() { 
-        if(!isHost) return;
-        generateMapForHost();
-        let playerStarts = {};
-        Object.keys(players).forEach((id, i) => {
-            let a = (i / Object.keys(players).length) * Math.PI * 2;
-            playerStarts[id] = { x: 1000 + Math.cos(a)*400, y: 1000 + Math.sin(a)*400 };
-        });
-        broadcast({ type: 'START', statues: statues, bushes: bushes, playerStarts: playerStarts }); startClientGame(); 
-    }
 
     window.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
     window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
     window.addEventListener('mousemove', e => { mousePos.x = e.clientX; mousePos.y = e.clientY; });
+    window.addEventListener('mousedown', () => {
+        const me = players[myId];
+        if(gameActive && me.team === 'seeker' && gameState === 'HUNT' && Date.now() - lastShockwave > 3000) {
+            lastShockwave = Date.now();
+            let wave = {type:'SHOCKWAVE', x:me.x+12, y:me.y+12, owner:myId, maxR: mapW, waveType: 'seeker'};
+            waves.push({...wave, r:0}); broadcast(wave);
+        }
+    });
 </script>
 </body>
 </html>
