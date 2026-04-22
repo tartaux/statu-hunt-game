@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Statu Hunt - Team Visibility Fix</title>
+    <title>Statu Hunt - Final Fix</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         body { margin: 0; background: #0a0a0a; color: white; font-family: 'Segoe UI', sans-serif; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; }
@@ -338,7 +338,19 @@
         for(let id in players) {
             let p = players[id];
             
-            if(p.team === 'hider') {
+            // LOGIQUE DE DESSIN STRICTE : Seul p.team détermine le skin
+            if(p.team === 'seeker') {
+                // SKIN CHERCHEUR (GARDE)
+                ctx.save(); ctx.translate(p.x + 12, p.y + 12); ctx.rotate(p.angle);
+                ctx.fillStyle = "#2980b9"; ctx.strokeStyle = "#3498db"; ctx.lineWidth = 3;
+                ctx.beginPath(); ctx.roundRect(-15, -15, 30, 30, 5); ctx.fill(); ctx.stroke();
+                ctx.fillStyle = "#ecf0f1"; ctx.fillRect(5, -8, 5, 16); 
+                ctx.shadowBlur = 15; ctx.shadowColor = "#3498db"; ctx.stroke();
+                ctx.restore();
+                ctx.fillStyle = "#3498db"; ctx.font = "bold 14px Arial"; ctx.textAlign = "center";
+                ctx.fillText(p.pseudo, p.x + 12, p.y - 18);
+            } else if (p.team === 'hider') {
+                // SKIN CACHÉ (CARRÉ)
                 if (p.isCaptured) {
                     if (id === myId) {
                         ctx.save();
@@ -351,26 +363,17 @@
                         ctx.fillText("SPECTRE", p.x + 12, p.y - 10); ctx.restore();
                     }
                 } else {
-                    // Les Hiders vivants voient leurs alliés vivants EN PERMANENCE
+                    // Les Hiders vivants voient leurs alliés vivants, le chercheur les voit s'ils sont proches
                     if (me.team === 'hider' || (me.team === 'seeker' && Math.sqrt((me.x-p.x)**2 + (me.y-p.y)**2) < 600)) {
                          ctx.fillStyle = (id === myId || me.team !== 'seeker') && p.fear > 80 ? "#962d22" : (p.isMoving ? "#333" : "#555");
                          ctx.fillRect(p.x, p.y, 25, 25);
                          if (me.team === 'hider') {
-                            ctx.strokeStyle = "rgba(46, 204, 113, 0.5)"; ctx.lineWidth = 2; ctx.strokeRect(p.x - 2, p.y - 2, 29, 29);
-                            ctx.fillStyle = "white"; ctx.font = "bold 12px Arial"; ctx.textAlign = "center";
+                            ctx.strokeStyle = "rgba(46, 204, 113, 0.7)"; ctx.lineWidth = 2; ctx.strokeRect(p.x - 2, p.y - 2, 29, 29);
+                            ctx.fillStyle = "#2ecc71"; ctx.font = "bold 12px Arial"; ctx.textAlign = "center";
                             ctx.fillText(p.pseudo, p.x + 12, p.y - 10);
                          }
                     }
                 }
-            } else {
-                ctx.save(); ctx.translate(p.x + 12, p.y + 12); ctx.rotate(p.angle);
-                ctx.fillStyle = "#2980b9"; ctx.strokeStyle = "#3498db"; ctx.lineWidth = 3;
-                ctx.beginPath(); ctx.roundRect(-15, -15, 30, 30, 5); ctx.fill(); ctx.stroke();
-                ctx.fillStyle = "#ecf0f1"; ctx.fillRect(5, -8, 5, 16); 
-                ctx.shadowBlur = 15; ctx.shadowColor = "#3498db"; ctx.stroke();
-                ctx.restore();
-                ctx.fillStyle = "#3498db"; ctx.font = "bold 14px Arial"; ctx.textAlign = "center";
-                ctx.fillText(p.pseudo, p.x + 12, p.y - 18);
             }
         }
         ctx.restore();
@@ -442,7 +445,13 @@
         }
         bushes = [];
         let bCount = mapSizeKey === 'S' ? 5 : mapSizeKey === 'M' ? 10 : 15;
-        for(let i=0; i<bCount; i++) { bushes.push({x: Math.random()*(mapW-400)+200, y: Math.random()*(mapH-400)+200, r: 85}); }
+        let attempts = 0;
+        while(bushes.length < bCount && attempts < 100) {
+            let newB = {x: Math.random()*(mapW-400)+200, y: Math.random()*(mapH-400)+200, r: 85};
+            let tooClose = bushes.some(b => Math.sqrt((b.x-newB.x)**2 + (b.y-newB.y)**2) < 400);
+            if(!tooClose) bushes.push(newB);
+            attempts++;
+        }
     }
 
     function requestStart() { 
