@@ -501,33 +501,32 @@
     function drawLighting(me) {
         ctx.save();
         const camX = -me.x + canvas.width/2, camY = -me.y + canvas.height/2;
+        
         if(me.isCaptured) {
-            ctx.fillStyle = "rgba(255,255,255,0.05)"; ctx.fillRect(0,0, canvas.width, canvas.height);
+            ctx.fillStyle = "rgba(255,255,255,0.05)"; 
+            ctx.fillRect(0,0, canvas.width, canvas.height);
         } else if(me.team === 'seeker') {
-            // 1. Dessiner le noir partout
+            // Création du masque d'obscurité complet
             ctx.fillStyle = "black";
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-            if(gameState === "HUNT") {
-                // 2. Préparer le "gommage" (tout ce qu'on dessine maintenant va trouer le noir)
-                ctx.globalCompositeOperation = 'destination-out';
+            if (gameState === "HUNT") {
+                ctx.beginPath();
+                // 1. On dessine un rectangle qui couvre TOUT l'écran (sens horaire)
+                ctx.rect(0, 0, canvas.width, canvas.height);
                 
-                ctx.beginPath();
-                // Cercle autour du joueur
-                ctx.arc(canvas.width/2+12, canvas.height/2+12, 80, 0, Math.PI*2);
-                ctx.fill();
-
-                ctx.beginPath();
-                // Cône de vision
+                // 2. On dessine le cercle de proximité (sens ANTI-horaire pour créer le trou)
+                ctx.moveTo(canvas.width/2+12 + 80, canvas.height/2+12);
+                ctx.arc(canvas.width/2+12, canvas.height/2+12, 80, 0, Math.PI*2, true);
+                
+                // 3. On dessine le cône de vision (sens ANTI-horaire pour créer le trou)
                 ctx.moveTo(canvas.width/2+12, canvas.height/2+12);
-                ctx.arc(canvas.width/2+12, canvas.height/2+12, 550, me.angle-0.55, me.angle+0.55);
-                ctx.lineTo(canvas.width/2+12, canvas.height/2+12);
+                ctx.arc(canvas.width/2+12, canvas.height/2+12, 550, me.angle + 0.55, me.angle - 0.55, true);
+                ctx.closePath();
+                
+                // Remplissage avec la règle nonzero (par défaut)
+                // Le chevauchement entre le cercle et le cône ne créera pas de noir !
                 ctx.fill();
-
-                // 3. Remettre en mode normal pour ne pas affecter le reste du rendu
-                ctx.globalCompositeOperation = 'source-over';
             } else {
-                // En PREP, tout est noir pour le chercheur
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
             }
         } else {
             let g = ctx.createRadialGradient(canvas.width/2, canvas.height/2, 100, canvas.width/2, canvas.height/2, canvas.width);
