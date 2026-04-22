@@ -505,57 +505,23 @@
     function drawLighting(me) {
         ctx.save();
         const camX = -me.x + canvas.width/2, camY = -me.y + canvas.height/2;
-        
         if(me.isCaptured) {
             ctx.fillStyle = "rgba(255,255,255,0.05)"; ctx.fillRect(0,0, canvas.width, canvas.height);
         } else if(me.team === 'seeker') {
-            // Fond noir total par défaut
-            ctx.fillStyle = "black"; 
-            ctx.beginPath(); 
-            ctx.rect(0,0, canvas.width, canvas.height);
-            
-            // On découpe la zone visible (Aura + Torche)
-            if(gameState === "HUNT") { 
-                // 1. Découpe de l'aura circulaire (100% du temps autour de lui)
-                ctx.arc(canvas.width/2+12, canvas.height/2+12, 100, 0, Math.PI*2, true);
-                
-                // 2. Découpe du cône de la lampe torche
-                ctx.moveTo(canvas.width/2+12, canvas.height/2+12); 
-                ctx.arc(canvas.width/2+12, canvas.height/2+12, 550, me.angle-0.55, me.angle+0.55, true); 
-                
-                ctx.fill("evenodd"); 
-
-                // Effet visuel de l'aura (le dégradé de lumière sur le sol)
-                let auraGrad = ctx.createRadialGradient(canvas.width/2+12, canvas.height/2+12, 0, canvas.width/2+12, canvas.height/2+12, 110);
-                auraGrad.addColorStop(0, "rgba(241, 196, 15, 0.15)");
-                auraGrad.addColorStop(1, "transparent");
-                ctx.fillStyle = auraGrad;
-                ctx.beginPath();
-                ctx.arc(canvas.width/2+12, canvas.height/2+12, 110, 0, Math.PI*2);
-                ctx.fill();
-            } else { 
-                ctx.fill(); 
-            } 
+            ctx.fillStyle = "black"; ctx.beginPath(); ctx.rect(0,0, canvas.width, canvas.height);
+            if(gameState === "HUNT") { ctx.moveTo(canvas.width/2+12, canvas.height/2+12); ctx.arc(canvas.width/2+12, canvas.height/2+12, 550, me.angle-0.55, me.angle+0.55); ctx.fill("evenodd"); }
+            else { ctx.fill(); } 
         } else {
-            // Logique pour les Cachés (Hiders)
             let g = ctx.createRadialGradient(canvas.width/2, canvas.height/2, 100, canvas.width/2, canvas.height/2, canvas.width);
             g.addColorStop(0, "transparent"); g.addColorStop(1, "rgba(0,0,0,0.85)");
             ctx.fillStyle = g; ctx.fillRect(0,0, canvas.width, canvas.height);
-            
             if(gameState === "HUNT") {
                 for(let id in players) {
                     let p = players[id];
                     if(p.team === 'seeker') {
-                        // Dessine les cônes des autres chercheurs
                         ctx.save(); ctx.translate(camX + p.x + 12, camY + p.y + 12); ctx.rotate(p.angle);
                         let b = ctx.createRadialGradient(0,0,50,0,0,550); b.addColorStop(0, "rgba(255,255,200,0.2)"); b.addColorStop(1, "transparent");
-                        ctx.fillStyle = b; ctx.beginPath(); ctx.moveTo(0,0); ctx.arc(0,0,550,-0.55,0.55); ctx.fill(); 
-                        
-                        // Aura des autres chercheurs
-                        let a = ctx.createRadialGradient(0,0,0,0,0,100); a.addColorStop(0, "rgba(255,255,200,0.1)"); a.addColorStop(1, "transparent");
-                        ctx.fillStyle = a; ctx.beginPath(); ctx.arc(0,0,100,0,Math.PI*2); ctx.fill();
-                        
-                        ctx.restore();
+                        ctx.fillStyle = b; ctx.beginPath(); ctx.moveTo(0,0); ctx.arc(0,0,550,-0.55,0.55); ctx.fill(); ctx.restore();
                     }
                 }
             }
