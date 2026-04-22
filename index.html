@@ -449,7 +449,6 @@
         statues.forEach(s => drawStatue(s.x, s.y, "#555", false, false, false, false, 0));
         baits.forEach(b => drawStatue(b.x, b.y, "#962d22", true, false, false, false, 100));
         
-        // Vagues normales (dessous)
         waves.forEach(w => {
             if(!w.isBushWave) {
                 ctx.beginPath(); ctx.arc(w.x, w.y, w.r, 0, Math.PI * 2);
@@ -471,16 +470,22 @@
         }
         ctx.restore();
 
-        // Éclairage
+        // Éclairage Fixé
         ctx.save();
         if(me.team === 'seeker' && !me.isCaptured) {
-            ctx.fillStyle = "black"; ctx.beginPath(); ctx.rect(0,0, canvas.width, canvas.height);
-            // 1. Cercle d'aura (Visibilité normale autour du cube)
-            ctx.arc(canvas.width/2+12, canvas.height/2+12, 40, 0, Math.PI * 2, true);
-            // 2. Lampe de poche
+            ctx.fillStyle = "black";
+            ctx.beginPath();
+            // Le rectangle couvre tout l'écran
+            ctx.rect(0,0, canvas.width, canvas.height);
+            
+            // Le cercle d'aura (on dessine à l'envers pour soustraire)
+            ctx.arc(canvas.width/2+12, canvas.height/2+12, 45, 0, Math.PI * 2, true);
+            
+            // La lampe de poche (soustraire aussi)
             if(gameState === "HUNT") {
                 ctx.moveTo(canvas.width/2+12, canvas.height/2+12);
-                ctx.arc(canvas.width/2+12, canvas.height/2+12, 550, me.angle-0.55, me.angle+0.55, true);
+                ctx.arc(canvas.width/2+12, canvas.height/2+12, 550, me.angle-0.55, me.angle+0.55, false);
+                ctx.lineTo(canvas.width/2+12, canvas.height/2+12);
             }
             ctx.fill();
         } else if(me.team === 'hider' && !me.isCaptured) {
