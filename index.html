@@ -21,7 +21,7 @@
         canvas { position: absolute; top: 0; left: 0; display: none; background: #000; }
         #ui-game { position: absolute; top: 20px; left: 20px; z-index: 50; display: none; pointer-events: none; width: calc(100% - 40px); }
         #game-status { color: #f1c40f; font-weight: bold; font-size: 1.8rem; text-shadow: 3px 3px 5px #000; }
-        
+     
         #game-overlay { 
             position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
             display: flex; flex-direction: column; justify-content: center; align-items: center; 
@@ -39,10 +39,6 @@
         .size-btn { font-size: 0.7rem; padding: 5px 10px; opacity: 0.5; }
         .size-btn.active { opacity: 1; border: 2px solid #f1c40f; }
         .hidden { display: none !important; }
-
-        #ability-ui { position: absolute; bottom: 20px; right: 20px; text-align: right; pointer-events: none; }
-        .ability-box { background: rgba(0,0,0,0.7); padding: 10px; border-radius: 10px; border: 1px solid #f1c40f; display: inline-block; }
-        .cooldown-text { font-size: 0.8rem; color: #bdc3c7; margin-bottom: 5px; }
     </style>
 </head>
 <body>
@@ -99,12 +95,6 @@
         <div id="fear-ui" class="fear-bar-container hidden">
             <div class="fear-bar"><div id="fear-fill"></div></div>
         </div>
-        <div id="ability-ui" class="hidden">
-            <div class="ability-box">
-                <div class="cooldown-text">LEURRE (CLIC GAUCHE)</div>
-                <div id="ability-cooldown-bar" style="width: 100px; height: 10px; background: #27ae60; border-radius: 5px;"></div>
-            </div>
-        </div>
     </div>
 
     <canvas id="gameCanvas"></canvas>
@@ -119,13 +109,10 @@
     const ctx = canvas.getContext('2d');
     let statues = [];
     let bushes = [];
-    let baits = [];
     const keys = {};
     let mousePos = { x: 0, y: 0 };
     const waves = [];
     let lastShockwave = 0;
-    let lastBaitTime = 0;
-    let stunTimer = 0;
     let detectionArrows = [];
     let fearSpamCounter = 0;
 
@@ -193,7 +180,11 @@
                 players[c.peer] = {pseudo: data.pseudo, team: null, x: 1000, y: 1000, angle: 0, fear: 0, isMoving: false, isCaptured: false, inBush: false}; 
                 if(isHost) broadcast({type:'SYNC', players: players}); 
             }
-            if(data.type === 'SYNC') { players = data.players; refreshUI(); }
+            if(data.type === 'SYNC') { 
+                players = data.players; 
+                if(isHost) broadcast({type:'SYNC', players: players});
+                refreshUI(); 
+            }
             if(data.type === 'SYNC_TIMER') { gameDuration = data.duration; updateTimerDisplay(); }
             if(data.type === 'SYNC_SIZE') { 
                 mapSizeKey = data.size; mapW = data.w; mapH = data.h;
@@ -201,7 +192,7 @@
                 document.getElementById('size-' + data.size).classList.add('active');
             }
             if(data.type === 'START') { 
-                players = data.players; statues = data.statues; bushes = data.bushes; baits = [];
+                players = data.players; statues = data.statues; bushes = data.bushes;
                 startClientGame(); 
             }
             if(data.type === 'END') showEndScreen(data.winner, data.reason);
@@ -213,19 +204,10 @@
             if(data.type === 'POS') { if(players[data.id]) players[data.id] = {...players[data.id], ...data}; }
             if(data.type === 'SHOCKWAVE') { waves.push({x: data.x, y: data.y, r: 0, maxR: data.maxR, owner: data.owner, waveType: data.waveType, isBushWave: data.isBushWave}); }
             if(data.type === 'FEAR_HIT' && data.targetId === myId && !players[myId].isCaptured) { players[myId].fear = Math.min(100, players[myId].fear + data.amount); }
-            
-            if(isHost) {
-                if(data.type === 'PLACE_BAIT') { baits.push({x: data.x, y: data.y, fearTimer: 0}); broadcast({type: 'SYNC_BAITS', baits: baits}); }
-                if(data.type === 'HIT_BAIT') {
-                    baits.splice(data.index, 1);
-                    broadcast({type: 'SYNC_BAITS', baits: baits});
-                    broadcast({type: 'STUN', targetId: data.seekerId});
-                }
-            }
-            if(data.type === 'SYNC_BAITS') { baits = data.baits; }
-            if(data.type === 'STUN' && data.targetId === myId) { stunTimer = 180; }
         });
-        if(!isHost && c === hostConn) { c.on('open', () => c.send({type: 'JOIN', pseudo: myPseudo})); }
+        if(!isHost && c === hostConn) {
+            c.on('open', () => c.send({type: 'JOIN', pseudo: myPseudo}));
+        }
     }
 
     function checkWinCondition() {
@@ -287,18 +269,19 @@
         document.getElementById('end-screen').style.display = 'none';
         document.getElementById('ui-game').style.display = 'block';
         const overlay = document.getElementById('game-overlay');
-        overlay.style.opacity = 1; overlay.innerHTML = '';
+        overlay.style.opacity = 1;
+        overlay.innerHTML = '';
+
         if(me.team === 'seeker') {
             overlay.innerHTML = '<div class="text-pulse">LA CHASSE COMMENCE BIENTÔT...</div>';
-            document.getElementById('ability-ui').classList.add('hidden');
         } else {
             overlay.innerHTML = '<div class="text-alert">COURREZ ! LES CHASSEURS ARRIVENT !</div>';
             setTimeout(() => overlay.style.opacity = 0, 4000);
-            document.getElementById('ability-ui').classList.remove('hidden');
         }
+
         canvas.style.display = 'block';
         canvas.width = window.innerWidth; canvas.height = window.innerHeight;
-        waves.length = 0; detectionArrows.length = 0; baits = []; stunTimer = 0; lastBaitTime = 0;
+        waves.length = 0; detectionArrows.length = 0;
         gameActive = true; gameState = "PREP"; prepTimer = 10;
         lastUpdate = Date.now();
         clearInterval(logicInterval); clearInterval(masterTimer);
@@ -323,19 +306,15 @@
         const now = Date.now(), dt = (now - lastUpdate) / 16.66;
         lastUpdate = now;
 
-        if(stunTimer > 0) { stunTimer -= 1 * dt; me.isMoving = false; } 
-        else {
-            let moved = false;
-            if(!(me.team === 'seeker' && gameState === "PREP")) {
-                let spd = (me.isCaptured ? 8 : (me.team === 'seeker' ? 6 : 4.5)) * dt;
-                if(keys['z'] || keys['w']) { me.y -= spd; moved = true; }
-                if(keys['s']) { me.y += spd; moved = true; }
-                if(keys['q'] || keys['a']) { me.x -= spd; moved = true; }
-                if(keys['d']) { me.x += spd; moved = true; }
-            }
-            me.isMoving = moved;
+        let moved = false;
+        if(!(me.team === 'seeker' && gameState === "PREP")) {
+            let spd = (me.isCaptured ? 8 : (me.team === 'seeker' ? 6 : 4.5)) * dt;
+            if(keys['z'] || keys['w']) { me.y -= spd; moved = true; }
+            if(keys['s']) { me.y += spd; moved = true; }
+            if(keys['q'] || keys['a']) { me.x -= spd; moved = true; }
+            if(keys['d']) { me.x += spd; moved = true; }
         }
-
+        me.isMoving = moved;
         me.x = Math.max(15, Math.min(mapW - 35, me.x));
         me.y = Math.max(15, Math.min(mapH - 35, me.y));
 
@@ -360,37 +339,16 @@
                         }
                     }
                 }
-                baits.forEach((b, idx) => {
-                    if(!w['hit_bait_'+idx]) {
-                        let dist = Math.sqrt((w.x - (b.x+12))**2 + (w.y - (b.y+12))**2);
-                        if(Math.abs(dist - w.r) < 25) {
-                            w['hit_bait_'+idx] = true;
-                            detectionArrows.push({angle: Math.atan2((b.y+12)-(me.y+12), (b.x+12)-(me.x+12)), life: 60});
-                        }
-                    }
-                });
             }
             if(w.r > w.maxR) waves.splice(i, 1);
         }
 
-        if(isHost) {
-            baits.forEach(b => {
-                b.fearTimer += 1 * dt;
-                if(b.fearTimer >= 20) {
-                    b.fearTimer = 0;
-                    let waveData = {type: 'SHOCKWAVE', x: b.x + 12, y: b.y + 12, owner: 'bait', maxR: 150, waveType: 'fear', isBushWave: false};
-                    waves.push({x: waveData.x, y: waveData.y, r: 0, maxR: 150, owner: 'bait', waveType: 'fear', isBushWave: false});
-                    broadcast(waveData);
-                }
-            });
-        }
-
         for(let i = detectionArrows.length - 1; i >= 0; i--) {
-            detectionArrows[i].life -= 1.2 * dt;
+            detectionArrows[i].life -= 1.2 * dt; // Un peu plus rapide
             if(detectionArrows[i].life <= 0) detectionArrows.splice(i, 1);
         }
 
-        if(!me.isCaptured && stunTimer <= 0) {
+        if(!me.isCaptured) {
             if(me.team === 'seeker') {
                 me.angle = Math.atan2(mousePos.y - canvas.height/2, mousePos.x - canvas.width/2);
                 if(gameState === "HUNT") {
@@ -398,37 +356,32 @@
                         if(id === myId) continue;
                         let p = players[id];
                         if(p.team === 'hider' && !p.isCaptured) {
-                            if(Math.sqrt((me.x - p.x)**2 + (me.y - p.y)**2) < 40) {
+                            let dist = Math.sqrt((me.x - p.x)**2 + (me.y - p.y)**2);
+                            if(dist < 40) {
+                                let captMsg = {type: 'CAPTURE', targetId: id};
                                 if(isHost) { players[id].isCaptured = true; broadcast({type: 'SYNC', players: players}); checkWinCondition(); }
-                                else if(hostConn && hostConn.open) hostConn.send({type: 'CAPTURE', targetId: id});
+                                else if(hostConn && hostConn.open) { hostConn.send(captMsg); }
                             }
                         }
                     }
-                    baits.forEach((b, idx) => {
-                        if(Math.sqrt((me.x - b.x)**2 + (me.y - b.y)**2) < 40) {
-                            stunTimer = 180;
-                            if(isHost) { baits.splice(idx, 1); broadcast({type: 'SYNC_BAITS', baits: baits}); broadcast({type: 'STUN', targetId: myId}); }
-                            else if(hostConn && hostConn.open) hostConn.send({type: 'HIT_BAIT', index: idx, seekerId: myId});
-                        }
-                    });
                 }
             } else if(gameState === "HUNT") {
-                if(me.inBush) me.fear = 100;
-                else if(!me.isMoving) me.fear = Math.min(100, me.fear + 0.4 * dt);
-                else me.fear = Math.max(0, me.fear - 1.2 * dt);
+                let wasInBush = me.inBush;
+                if(me.inBush) { me.fear = 100; } 
+                else {
+                    if(!moved) me.fear = Math.min(100, me.fear + 0.4 * dt); 
+                    else me.fear = Math.max(0, me.fear - 1.2 * dt);
+                }
                 
                 if(me.fear >= 100) {
                     fearSpamCounter += 1 * dt;
                     if(fearSpamCounter >= 20) {
                         fearSpamCounter = 0;
-                        let waveData = {type: 'SHOCKWAVE', x: me.x + 12, y: me.y + 12, owner: myId, maxR: 150, waveType: 'fear', isBushWave: me.inBush};
-                        waves.push({x: waveData.x, y: waveData.y, r: 0, maxR: 150, owner: myId, waveType: 'fear', isBushWave: me.inBush});
+                        let waveData = {type: 'SHOCKWAVE', x: me.x + 12, y: me.y + 12, owner: myId, maxR: 150, waveType: 'fear', isBushWave: wasInBush};
+                        waves.push({x: waveData.x, y: waveData.y, r: 0, maxR: 150, owner: myId, waveType: 'fear', isBushWave: wasInBush});
                         if(isHost) broadcast(waveData); else if(hostConn && hostConn.open) hostConn.send(waveData);
                     }
-                }
-                let progress = Math.min(100, ((Date.now() - lastBaitTime) / 30000) * 100);
-                document.getElementById('ability-cooldown-bar').style.width = progress + "px";
-                document.getElementById('ability-cooldown-bar').style.background = progress >= 100 ? "#27ae60" : "#e67e22";
+                } else { fearSpamCounter = 0; }
             }
         }
         
@@ -442,96 +395,84 @@
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         const camX = -me.x + canvas.width/2, camY = -me.y + canvas.height/2;
         
-        // 1. DESSIN DU MONDE (Inchangé)
-        ctx.save(); 
-        ctx.translate(camX, camY);
+        ctx.save(); ctx.translate(camX, camY);
         ctx.strokeStyle = "#f1c40f"; ctx.lineWidth = 10; ctx.strokeRect(0,0, mapW, mapH);
         ctx.fillStyle = "#111"; ctx.fillRect(0,0, mapW, mapH);
-        bushes.forEach(b => { ctx.fillStyle = "#0a2b0a"; ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI*2); ctx.fill(); ctx.strokeStyle = "#1a3d1a"; ctx.lineWidth = 5; ctx.stroke(); });
+        
+        bushes.forEach(b => {
+            ctx.fillStyle = "#0a2b0a"; ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI*2); ctx.fill();
+            ctx.strokeStyle = "#1a3d1a"; ctx.lineWidth = 5; ctx.stroke();
+        });
+
         statues.forEach(s => drawStatue(s.x, s.y, "#555", false, false, false, false, 0));
-        baits.forEach(b => drawStatue(b.x, b.y, "#962d22", true, false, false, false, 100));
         
         waves.forEach(w => {
-            if(!w.isBushWave) {
+            if(w.waveType === 'seeker') {
                 ctx.beginPath(); ctx.arc(w.x, w.y, w.r, 0, Math.PI * 2);
-                ctx.strokeStyle = w.waveType === 'seeker' ? `rgba(52, 152, 219, ${1 - w.r/w.maxR})` : `rgba(255, 0, 0, ${1 - w.r/w.maxR})`;
+                ctx.strokeStyle = `rgba(52, 152, 219, ${1 - w.r/w.maxR})`; 
                 ctx.lineWidth = 4; ctx.stroke();
+            } else if(w.waveType === 'fear' && !w.isBushWave) {
+                ctx.beginPath(); ctx.arc(w.x, w.y, w.r, 0, Math.PI * 2);
+                ctx.strokeStyle = `rgba(255, 0, 0, ${1 - w.r/w.maxR})`; 
+                ctx.lineWidth = 5; ctx.stroke();
             }
         });
 
         for(let id in players) {
             let p = players[id];
-            if(p.isCaptured) { if(id === myId) drawStatue(p.x, p.y, "rgba(255,255,255,0.6)", false, true, false, true, 0); continue; }
+            if(p.isCaptured) {
+                if(id === myId) drawStatue(p.x, p.y, "rgba(255,255,255,0.6)", false, true, false, true, 0);
+                continue;
+            }
             if(p.team === 'hider') {
-                let color = (id === myId || me.team !== 'seeker') && p.fear > 80 ? "#962d22" : (p.isMoving ? "#333" : "#555");
+                let baseColor = p.isMoving ? "#333" : "#555"; 
+                let color = (id === myId || me.team !== 'seeker') && p.fear > 80 ? "#962d22" : baseColor;
                 drawStatue(p.x, p.y, color, p.fear >= 100, (id===myId), p.isMoving, false, p.fear);
-            } else { 
-                drawSeeker(p); 
-                if(stunTimer > 0 && id === myId) drawStunStars(p.x, p.y);
-            }
+            } else { drawSeeker(p); }
         }
         ctx.restore();
 
-        // 2. SYSTÈME DE LUMIÈRE (MASQUE FIXÉ)
-        ctx.save();
-        if(me.team === 'seeker' && !me.isCaptured) {
-            ctx.fillStyle = "black";
-            ctx.beginPath();
-            
-            // Le grand rectangle noir (clockwise par défaut)
-            ctx.rect(0, 0, canvas.width, canvas.height);
+        drawLighting(me);
 
-            if(gameState === "HUNT") {
-                // Les trous (aura + lampe) dessinés ANTI-CLOCKWISE (true) perceront le rect
-                
-                // 1. Aura autour du cube (un peu plus grande que le cube)
-                // Position centrale à l'écran : canvas.width/2 + 12.5 (moitié du cube de 25)
-                ctx.moveTo(canvas.width/2 + 12.5 + 45, canvas.height/2 + 12.5);
-                ctx.arc(canvas.width/2 + 12.5, canvas.height/2 + 12.5, 45, 0, Math.PI * 2, true);
-
-                // 2. Cône de la lampe
-                ctx.moveTo(canvas.width/2 + 12.5, canvas.height/2 + 12.5);
-                // arc(x, y, radius, startAngle, endAngle, anticlockwise)
-                ctx.arc(canvas.width/2 + 12.5, canvas.height/2 + 12.5, 550, me.angle - 0.55, me.angle + 0.55, true);
-                ctx.lineTo(canvas.width/2 + 12.5, canvas.height/2 + 12.5);
-            }
-            // Si PREP, on ne dessine aucune excavation, donc tout reste noir.
-            
-            ctx.fill();
-        } else if(me.team === 'hider' && !me.isCaptured) {
-            // Logique de visibilité pour le caché (Vignettage + lampes seekers)
-            let g = ctx.createRadialGradient(canvas.width/2, canvas.height/2, 100, canvas.width/2, canvas.height/2, canvas.width);
-            g.addColorStop(0, "transparent"); g.addColorStop(1, "rgba(0,0,0,0.85)"); ctx.fillStyle = g; ctx.fillRect(0,0, canvas.width, canvas.height);
-            if(gameState === "HUNT") {
-                for(let id in players) {
-                    let p = players[id];
-                    if(p.team === 'seeker') {
-                        ctx.save(); ctx.translate(camX + p.x + 12.5, camY + p.y + 12.5); ctx.rotate(p.angle);
-                        let b = ctx.createRadialGradient(0,0,50,0,0,550); b.addColorStop(0, "rgba(255,255,200,0.2)"); b.addColorStop(1, "transparent");
-                        ctx.fillStyle = b; ctx.beginPath(); ctx.moveTo(0,0); ctx.arc(0,0,550,-0.55,0.55); ctx.fill(); ctx.restore();
-                    }
-                }
-            }
-        }
-        ctx.restore();
-
-        // 3. EFFETS PAR DESSUS L'OBSCURITÉ (Vagues buissons, flèches)
         ctx.save(); ctx.translate(camX, camY);
         waves.forEach(w => {
-            if(w.isBushWave) {
+            if(w.waveType === 'fear' && w.isBushWave) {
                 ctx.beginPath(); ctx.arc(w.x, w.y, w.r, 0, Math.PI * 2);
-                ctx.strokeStyle = `rgba(255, 0, 0, ${1 - w.r/w.maxR})`; ctx.lineWidth = 10; ctx.stroke();
+                ctx.strokeStyle = `rgba(255, 0, 0, ${1 - w.r/w.maxR})`; 
+                ctx.lineWidth = 10; ctx.stroke();
             }
         });
         ctx.restore();
 
+        // Système d'Arcs Radar (Remplacement des flèches)
         if(me.team === 'seeker' && !me.isCaptured) {
             detectionArrows.forEach(arr => {
-                const opacity = arr.life / 60; const distance = 120 + (1 - opacity) * 80;
-                ctx.save(); ctx.translate(canvas.width/2 + 12.5, canvas.height/2 + 12.5); ctx.rotate(arr.angle);
-                ctx.beginPath(); ctx.arc(0, 0, distance, -Math.PI/6, Math.PI/6);
-                ctx.shadowBlur = 20 * opacity; ctx.shadowColor = "#f1c40f"; ctx.strokeStyle = `rgba(241, 196, 15, ${opacity})`;
-                ctx.lineWidth = 6 * opacity + 2; ctx.lineCap = "round"; ctx.stroke(); ctx.restore();
+                const opacity = arr.life / 60;
+                const distance = 120 + (1 - opacity) * 80; // L'arc s'éloigne du joueur
+                
+                ctx.save();
+                ctx.translate(canvas.width/2 + 12, canvas.height/2 + 12);
+                ctx.rotate(arr.angle);
+                
+                ctx.beginPath();
+                // On dessine un arc de cercle centré sur la cible
+                // L'arc fait 60 degrés (Math.PI / 3)
+                ctx.arc(0, 0, distance, -Math.PI/6, Math.PI/6);
+                
+                ctx.shadowBlur = 20 * opacity;
+                ctx.shadowColor = "#f1c40f";
+                ctx.strokeStyle = `rgba(241, 196, 15, ${opacity})`;
+                ctx.lineWidth = 6 * opacity + 2;
+                ctx.lineCap = "round";
+                ctx.stroke();
+
+                // Petit point central de l'arc pour bien marquer l'axe
+                ctx.fillStyle = `rgba(241, 196, 15, ${opacity * 0.5})`;
+                ctx.beginPath();
+                ctx.arc(distance + 10, 0, 4, 0, Math.PI*2);
+                ctx.fill();
+                
+                ctx.restore();
             });
         }
         if(me.team === 'hider' && !me.isCaptured) { 
@@ -541,23 +482,19 @@
         requestAnimationFrame(draw);
     }
 
-    // -- Fonctions de dessin utilitaires (Inchangées, sauf ajustement centre 12.5) --
-    function drawStunStars(x, y) {
-        const time = Date.now() * 0.005;
-        for(let i=0; i<3; i++) {
-            const angle = time + (i * Math.PI * 2 / 3);
-            const sx = x + 12.5 + Math.cos(angle) * 20; const sy = y - 10 + Math.sin(angle) * 8;
-            ctx.fillStyle = "#f1c40f"; ctx.beginPath();
-            for(let j=0; j<5; j++) ctx.lineTo(sx + Math.cos(j*Math.PI*0.8)*6, sy + Math.sin(j*Math.PI*0.8)*6);
-            ctx.closePath(); ctx.fill();
-        }
-    }
-
     function drawStatue(x, y, color, pulse, isSelf, moving, isGhost, fearValue) {
         ctx.save();
-        if(!isGhost && fearValue > 50) { let intensity = (fearValue - 50) / 10; x += (Math.random() - 0.5) * intensity; y += (Math.random() - 0.5) * intensity; }
-        if(isGhost) { ctx.fillStyle = "rgba(255,255,255,0.4)"; ctx.beginPath(); ctx.ellipse(x-5, y+10, 10, 5, -0.5, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.ellipse(x+30, y+10, 10, 5, 0.5, 0, Math.PI*2); ctx.fill(); }
-        else { ctx.fillStyle = "rgba(0,0,0,0.4)"; ctx.beginPath(); ctx.ellipse(x+12.5, y+28, 15, 6, 0, 0, Math.PI*2); ctx.fill(); }
+        if(!isGhost && fearValue > 50) {
+            let intensity = (fearValue - 50) / 10;
+            x += (Math.random() - 0.5) * intensity; y += (Math.random() - 0.5) * intensity;
+        }
+        if(isGhost) {
+            ctx.fillStyle = "rgba(255,255,255,0.4)";
+            ctx.beginPath(); ctx.ellipse(x-5, y+10, 10, 5, -0.5, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.ellipse(x+30, y+10, 10, 5, 0.5, 0, Math.PI*2); ctx.fill();
+        } else {
+            ctx.fillStyle = "rgba(0,0,0,0.4)"; ctx.beginPath(); ctx.ellipse(x+12, y+28, 15, 6, 0, 0, Math.PI*2); ctx.fill();
+        }
         ctx.fillStyle = color; ctx.fillRect(x, y, 25, 25);
         if(isSelf && !isGhost) { ctx.fillStyle = "#f1c40f"; ctx.fillRect(x+10, y-5, 5, 5); }
         ctx.restore();
@@ -565,7 +502,67 @@
 
     function drawSeeker(p) { ctx.fillStyle = "#3498db"; ctx.fillRect(p.x, p.y, 25, 25); ctx.strokeStyle = "white"; ctx.strokeRect(p.x, p.y, 25, 25); }
 
-    // -- Logique Serveur / Génération --
+    function drawLighting(me) {
+        ctx.save();
+        const camX = -me.x + canvas.width/2, camY = -me.y + canvas.height/2;
+        
+        if(me.isCaptured) {
+            ctx.fillStyle = "rgba(255,255,255,0.05)"; ctx.fillRect(0,0, canvas.width, canvas.height);
+        } else if(me.team === 'seeker') {
+            // Fond noir total par défaut
+            ctx.fillStyle = "black"; 
+            ctx.beginPath(); 
+            ctx.rect(0,0, canvas.width, canvas.height);
+            
+            // On découpe la zone visible (Aura + Torche)
+            if(gameState === "HUNT") { 
+                // 1. Découpe de l'aura circulaire (100% du temps autour de lui)
+                ctx.arc(canvas.width/2+12, canvas.height/2+12, 100, 0, Math.PI*2, true);
+                
+                // 2. Découpe du cône de la lampe torche
+                ctx.moveTo(canvas.width/2+12, canvas.height/2+12); 
+                ctx.arc(canvas.width/2+12, canvas.height/2+12, 550, me.angle-0.55, me.angle+0.55, true); 
+                
+                ctx.fill("evenodd"); 
+
+                // Effet visuel de l'aura (le dégradé de lumière sur le sol)
+                let auraGrad = ctx.createRadialGradient(canvas.width/2+12, canvas.height/2+12, 0, canvas.width/2+12, canvas.height/2+12, 110);
+                auraGrad.addColorStop(0, "rgba(241, 196, 15, 0.15)");
+                auraGrad.addColorStop(1, "transparent");
+                ctx.fillStyle = auraGrad;
+                ctx.beginPath();
+                ctx.arc(canvas.width/2+12, canvas.height/2+12, 110, 0, Math.PI*2);
+                ctx.fill();
+            } else { 
+                ctx.fill(); 
+            } 
+        } else {
+            // Logique pour les Cachés (Hiders)
+            let g = ctx.createRadialGradient(canvas.width/2, canvas.height/2, 100, canvas.width/2, canvas.height/2, canvas.width);
+            g.addColorStop(0, "transparent"); g.addColorStop(1, "rgba(0,0,0,0.85)");
+            ctx.fillStyle = g; ctx.fillRect(0,0, canvas.width, canvas.height);
+            
+            if(gameState === "HUNT") {
+                for(let id in players) {
+                    let p = players[id];
+                    if(p.team === 'seeker') {
+                        // Dessine les cônes des autres chercheurs
+                        ctx.save(); ctx.translate(camX + p.x + 12, camY + p.y + 12); ctx.rotate(p.angle);
+                        let b = ctx.createRadialGradient(0,0,50,0,0,550); b.addColorStop(0, "rgba(255,255,200,0.2)"); b.addColorStop(1, "transparent");
+                        ctx.fillStyle = b; ctx.beginPath(); ctx.moveTo(0,0); ctx.arc(0,0,550,-0.55,0.55); ctx.fill(); 
+                        
+                        // Aura des autres chercheurs
+                        let a = ctx.createRadialGradient(0,0,0,0,0,100); a.addColorStop(0, "rgba(255,255,200,0.1)"); a.addColorStop(1, "transparent");
+                        ctx.fillStyle = a; ctx.beginPath(); ctx.arc(0,0,100,0,Math.PI*2); ctx.fill();
+                        
+                        ctx.restore();
+                    }
+                }
+            }
+        }
+        ctx.restore();
+    }
+
     function generateMapForHost() {
         let seed = 0; for(let i=0; i<roomCode.length; i++) seed += roomCode.charCodeAt(i);
         const pseudoRand = () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; };
@@ -587,7 +584,8 @@
 
     function showEndScreen(w, r) {
         gameActive = false; clearInterval(logicInterval); clearInterval(masterTimer);
-        document.getElementById('ui-game').style.display = 'none'; document.getElementById('game-overlay').style.opacity = 0;
+        document.getElementById('ui-game').style.display = 'none';
+        document.getElementById('game-overlay').style.opacity = 0;
         document.getElementById('end-screen').style.display = 'block';
         document.getElementById('victory-title').innerText = (w === 'seekers') ? "LES INTRUS ONT ÉTÉ TROUVÉS" : "LES STATUES ONT SURVÉCU";
         document.getElementById('victory-desc').innerText = r;
@@ -598,35 +596,34 @@
     function resetToLobby() { 
         gameActive = false; clearInterval(logicInterval); clearInterval(masterTimer);
         canvas.style.display = 'none'; document.getElementById('end-screen').style.display = 'none'; 
+        document.getElementById('game-overlay').style.opacity = 0;
         document.getElementById('lobby').style.display = 'block'; 
         for(let id in players) { players[id].isCaptured = false; players[id].fear = 0; players[id].inBush = false; }
-        baits = []; stunTimer = 0; lastBaitTime = 0;
         let timeParts = document.getElementById('timerSetting').innerText.split(':');
-        gameDuration = parseInt(timeParts[0]) * 60 + parseInt(timeParts[1]); updateTimerDisplay(); refreshUI(); 
+        gameDuration = parseInt(timeParts[0]) * 60 + parseInt(timeParts[1]);
+        updateTimerDisplay(); refreshUI(); 
     }
 
-    function requestStart() { if(isHost) { randomizeSpawns(); generateMapForHost(); broadcast({ type: 'START', players: players, statues: statues, bushes: bushes }); setTimeout(startClientGame, 200); } }
+    function requestStart() { 
+        if(isHost) { 
+            randomizeSpawns(); 
+            generateMapForHost(); 
+            broadcast({ type: 'START', players: players, statues: statues, bushes: bushes }); 
+            setTimeout(startClientGame, 200); 
+        } 
+    }
 
-    // -- Inputs --
     window.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
     window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
     window.addEventListener('mousemove', e => { mousePos.x = e.clientX; mousePos.y = e.clientY; });
     window.addEventListener('mousedown', e => {
         const me = players[myId];
-        if(!gameActive || me.isCaptured || gameState !== "HUNT" || stunTimer > 0) return;
-        if(me.team === 'seeker' && e.button === 0) {
+        if(gameActive && !me.isCaptured && gameState === "HUNT" && me.team === 'seeker' && e.button === 0) {
             if(Date.now() - lastShockwave > 4000) {
                 lastShockwave = Date.now();
-                // Utilisation du centre 12.5
-                let waveData = {type: 'SHOCKWAVE', x: me.x + 12.5, y: me.y + 12.5, owner: myId, maxR: mapW, waveType: 'seeker', isBushWave: false};
+                let waveData = {type: 'SHOCKWAVE', x: me.x + 12, y: me.y + 12, owner: myId, maxR: mapW, waveType: 'seeker', isBushWave: false};
                 waves.push({x: waveData.x, y: waveData.y, r: 0, maxR: mapW, owner: myId, waveType: 'seeker', isBushWave: false});
                 if(isHost) broadcast(waveData); else if(hostConn && hostConn.open) hostConn.send(waveData);
-            }
-        } else if(me.team === 'hider' && e.button === 0) {
-            if(Date.now() - lastBaitTime > 30000) {
-                lastBaitTime = Date.now();
-                if(isHost) { baits.push({x: me.x, y: me.y, fearTimer: 0}); broadcast({type: 'SYNC_BAITS', baits: baits}); } 
-                else if(hostConn && hostConn.open) hostConn.send({type: 'PLACE_BAIT', x: me.x, y: me.y});
             }
         }
     });
