@@ -377,7 +377,6 @@
                     fearSpamCounter += 1 * dt;
                     if(fearSpamCounter >= 20) {
                         fearSpamCounter = 0;
-                        // On définit si l'onde vient d'un buisson ou pas
                         let waveData = {type: 'SHOCKWAVE', x: me.x + 12, y: me.y + 12, owner: myId, maxR: 150, waveType: 'fear', isBushWave: wasInBush};
                         waves.push({x: waveData.x, y: waveData.y, r: 0, maxR: 150, owner: myId, waveType: 'fear', isBushWave: wasInBush});
                         if(isHost) broadcast(waveData); else if(hostConn && hostConn.open) hostConn.send(waveData);
@@ -413,7 +412,6 @@
                 ctx.strokeStyle = `rgba(52, 152, 219, ${1 - w.r/w.maxR})`; 
                 ctx.lineWidth = 4; ctx.stroke();
             } else if(w.waveType === 'fear' && !w.isBushWave) {
-                // Ondes de peur NATURELLES (soumises à l'obscurité)
                 ctx.beginPath(); ctx.arc(w.x, w.y, w.r, 0, Math.PI * 2);
                 ctx.strokeStyle = `rgba(255, 0, 0, ${1 - w.r/w.maxR})`; 
                 ctx.lineWidth = 5; ctx.stroke();
@@ -436,7 +434,6 @@
 
         drawLighting(me);
 
-        // Ondes de BUISSON (Percent le noir)
         ctx.save(); ctx.translate(camX, camY);
         waves.forEach(w => {
             if(w.waveType === 'fear' && w.isBushWave) {
@@ -447,11 +444,34 @@
         });
         ctx.restore();
 
+        // Système d'Echo Radar (Remplacement des flèches)
         if(me.team === 'seeker' && !me.isCaptured) {
             detectionArrows.forEach(arr => {
-                ctx.save(); ctx.translate(canvas.width/2 + 12, canvas.height/2 + 12); ctx.rotate(arr.angle);
-                ctx.fillStyle = `rgba(241, 196, 15, ${arr.life / 60})`; ctx.beginPath();
-                ctx.moveTo(84, 0); ctx.lineTo(63, -14); ctx.lineTo(63, 14); ctx.closePath(); ctx.fill(); ctx.restore();
+                const opacity = arr.life / 60;
+                const distOffset = (1 - opacity) * 30; // Animation de glissement vers l'extérieur
+                
+                ctx.save();
+                ctx.translate(canvas.width/2 + 12, canvas.height/2 + 12);
+                ctx.rotate(arr.angle);
+                
+                // Dessin du Radar en V
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = "#f1c40f";
+                ctx.fillStyle = `rgba(241, 196, 15, ${opacity})`;
+                
+                ctx.beginPath();
+                // Pointe principale
+                ctx.moveTo(85 + distOffset, 0);
+                // Aile gauche
+                ctx.lineTo(60 + distOffset, -20);
+                // Creux central (forme en V)
+                ctx.lineTo(70 + distOffset, 0);
+                // Aile droite
+                ctx.lineTo(60 + distOffset, 20);
+                ctx.closePath();
+                ctx.fill();
+                
+                ctx.restore();
             });
         }
         if(me.team === 'hider' && !me.isCaptured) { 
