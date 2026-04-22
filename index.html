@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Statu Hunt - Visibility & Sync Fix</title>
+    <title>Statu Hunt - Lobby Fixed</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         body { margin: 0; background: #0a0a0a; color: white; font-family: 'Segoe UI', sans-serif; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; }
@@ -106,20 +106,27 @@
     }
 
     function createRoom() {
+        isHost = true;
         roomCode = Math.random().toString(36).substring(2, 7).toUpperCase();
-        isHost = true; setupPeer('SH-' + roomCode); showRoom(roomCode);
+        setupPeer('SH-' + roomCode); 
+        showRoom(roomCode);
         document.getElementById('startBtn').classList.remove('hidden');
         document.getElementById('backToLobbyBtn').style.display = 'block';
     }
 
     function joinRoom() {
+        isHost = false;
         roomCode = document.getElementById('joinInput').value.toUpperCase().trim();
         setupPeer();
-        setTimeout(() => { hostConn = peer.connect('SH-' + roomCode); initConn(hostConn); }, 800);
+        setTimeout(() => { 
+            hostConn = peer.connect('SH-' + roomCode); 
+            initConn(hostConn); 
+        }, 800);
         showRoom(roomCode);
     }
 
     function setupPeer(id = null) {
+        if (peer) peer.destroy();
         peer = new Peer(id);
         peer.on('open', (i) => {
             myId = i;
@@ -129,7 +136,12 @@
         peer.on('connection', (c) => {
             connections.push(c);
             initConn(c);
-            if(isHost) setTimeout(() => { c.send({type:'SYNC', players: players}); }, 500);
+            if(isHost) {
+                setTimeout(() => { 
+                    c.send({type:'SYNC', players: players}); 
+                    c.send({type:'SYNC_TIMER', duration: gameDuration});
+                }, 500);
+            }
         });
     }
 
@@ -139,7 +151,8 @@
                 players[c.peer] = {pseudo: data.pseudo, team: null, x: 1000, y: 1000, angle: 0, fear: 0, isMoving: false, isCaptured: false, inBush: false}; 
                 if(isHost) broadcast({type:'SYNC', players: players}); 
             }
-            if(data.type === 'SYNC') { for(let id in data.players) players[id] = {...players[id], ...data.players[id]}; refreshUI(); }
+            if(data.type === 'SYNC') { players = data.players; refreshUI(); }
+            if(data.type === 'SYNC_TIMER') { gameDuration = data.duration; let m = Math.floor(gameDuration/60), s = gameDuration%60; document.getElementById('timerSetting').innerText = `${m}:${s<10?'0'+s:s}`; }
             if(data.type === 'START') { 
                 statues = data.statues; bushes = data.bushes; 
                 for(let id in data.playerStarts) { if(players[id]) { players[id].x = data.playerStarts[id].x; players[id].y = data.playerStarts[id].y; players[id].isCaptured = false; players[id].fear = 0; } }
@@ -148,9 +161,7 @@
             if(data.type === 'END') showEndScreen(data.winner, data.reason);
             if(data.type === 'BACK_LOBBY') resetToLobby();
             if(data.type === 'POS') { if(players[data.id]) { players[data.id].x = data.x; players[data.id].y = data.y; players[data.id].angle = data.angle; players[data.id].isMoving = data.isMoving; players[data.id].fear = data.fear; players[data.id].isCaptured = data.isCaptured; players[data.id].inBush = data.inBush; } }
-            if(data.type === 'SHOCKWAVE') { waves.push({x: data.x, y: data.y, r: 0, maxR: data.maxR, owner: data.owner, waveType: data.waveType, isBushWave: data.isBushWave}); }
             if(data.type === 'CAPTURE') { if(players[data.targetId]) { players[data.targetId].isCaptured = true; if(isHost) { broadcast({type: 'SYNC', players: players}); checkWinCondition(); } } }
-            if(data.type === 'FEAR_HIT' && data.targetId === myId) { players[myId].fear = Math.min(100, players[myId].fear + data.amount); }
         });
         if(!isHost && c === hostConn) c.on('open', () => c.send({type: 'JOIN', pseudo: myPseudo}));
     }
@@ -175,6 +186,8 @@
         }
         if(isHost) document.getElementById('startBtn').disabled = !(sCount > 0 && hCount > 0);
     }
+
+    function changeTimer(v) { if(isHost) { gameDuration = Math.max(60, gameDuration + v); let m = Math.floor(gameDuration/60), s = gameDuration%60; document.getElementById('timerSetting').innerText = `${m}:${s<10?'0'+s:s}`; broadcast({type: 'SYNC_TIMER', duration: gameDuration}); } }
 
     function startClientGame() {
         const me = players[myId];
@@ -241,32 +254,7 @@
             }
         } else if(gameState === "HUNT" && !me.isCaptured) {
             if(me.inBush) me.fear = 100; else { if(!moved) me.fear = Math.min(100, me.fear + 0.4 * dt); else me.fear = Math.max(0, me.fear - 1.2 * dt); }
-            if(me.fear >= 100) {
-                fearSpamCounter += 1 * dt;
-                if(fearSpamCounter >= 20) {
-                    fearSpamCounter = 0;
-                    let wave = {type: 'SHOCKWAVE', x: me.x + 12, y: me.y + 12, owner: myId, maxR: 150, waveType: 'fear', isBushWave: me.inBush};
-                    waves.push({...wave, r:0}); if(isHost) broadcast(wave); else hostConn?.send(wave);
-                }
-            } else fearSpamCounter = 0;
         }
-
-        for(let i = waves.length - 1; i >= 0; i--) {
-            let w = waves[i]; w.r += 12 * dt;
-            if(w.owner === myId && me.team === 'seeker' && w.waveType === 'seeker') {
-                for(let id in players) {
-                    let p = players[id];
-                    if(p.team === 'hider' && !p.isCaptured && !p.inBush && !w['hit_'+id]) {
-                        if(Math.abs(Math.sqrt((w.x - (p.x+12))**2 + (w.y - (p.y+12))**2) - w.r) < 25) {
-                            w['hit_'+id] = true; broadcast({type: 'FEAR_HIT', targetId: id, amount: 15});
-                            detectionArrows.push({angle: Math.atan2((p.y+12)-(me.y+12), (p.x+12)-(me.x+12)), life: 60});
-                        }
-                    }
-                }
-            }
-            if(w.r > w.maxR) waves.splice(i, 1);
-        }
-        for(let i = detectionArrows.length - 1; i >= 0; i--) { detectionArrows[i].life -= 1.2 * dt; if(detectionArrows[i].life <= 0) detectionArrows.splice(i, 1); }
 
         let sync = {type: 'POS', id: myId, x: me.x, y: me.y, angle: me.angle, fear: me.fear, isMoving: me.isMoving, isCaptured: me.isCaptured, inBush: me.inBush};
         if(isHost) broadcast(sync); else hostConn?.send(sync);
@@ -279,7 +267,6 @@
         const camX = -me.x + canvas.width/2, camY = -me.y + canvas.height/2;
 
         ctx.save(); ctx.translate(camX, camY);
-        ctx.strokeStyle = "#f1c40f"; ctx.lineWidth = 10; ctx.strokeRect(0,0, mapW, mapH);
         ctx.fillStyle = "#111"; ctx.fillRect(0,0, mapW, mapH);
         bushes.forEach(b => { ctx.fillStyle = "#0a2b0a"; ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI*2); ctx.fill(); });
         statues.forEach(s => { ctx.fillStyle = "#555"; ctx.fillRect(s.x, s.y, 25, 25); });
@@ -287,37 +274,18 @@
         for(let id in players) {
             let p = players[id];
             if(p.team === 'seeker') {
-                // SKIN CHERCHEUR
                 ctx.save(); ctx.translate(p.x + 12, p.y + 12); ctx.rotate(p.angle);
-                ctx.fillStyle = "#2980b9"; ctx.strokeStyle = "#3498db"; ctx.lineWidth = 3;
-                ctx.beginPath(); ctx.roundRect(-15, -15, 30, 30, 5); ctx.fill(); ctx.stroke();
+                ctx.fillStyle = "#2980b9"; ctx.beginPath(); ctx.roundRect(-15, -15, 30, 30, 5); ctx.fill();
                 ctx.fillStyle = "#ecf0f1"; ctx.fillRect(5, -8, 5, 16); ctx.restore();
-                ctx.fillStyle = "#3498db"; ctx.font = "bold 14px Arial"; ctx.textAlign = "center";
-                ctx.fillText(p.pseudo, p.x + 12, p.y - 18);
             } else {
-                // SKIN CACHÉ
-                if (p.isCaptured) {
-                    if (id === myId) {
-                        ctx.fillStyle = "white"; ctx.fillRect(p.x, p.y, 25, 25);
-                        ctx.fillText("SPECTRE", p.x + 12, p.y - 10);
-                    }
-                } else {
-                    // Vision : Hiders voient hiders / Seekers voient si proche
-                    let dist = Math.sqrt((me.x-p.x)**2 + (me.y-p.y)**2);
-                    let visible = (me.team === 'hider') || (me.team === 'seeker' && dist < 550);
-                    if(visible) {
-                        ctx.fillStyle = (id === myId || me.team !== 'seeker') && p.fear > 80 ? "#962d22" : (p.isMoving ? "#333" : "#555");
-                        ctx.fillRect(p.x, p.y, 25, 25);
-                        if(me.team === 'hider') {
-                            ctx.fillStyle = "#2ecc71"; ctx.font = "bold 12px Arial"; ctx.textAlign = "center";
-                            ctx.fillText(p.pseudo, p.x + 12, p.y - 10);
-                        }
-                    }
+                let dist = Math.sqrt((me.x-p.x)**2 + (me.y-p.y)**2);
+                if((me.team === 'hider' && !p.isCaptured) || (me.team === 'seeker' && dist < 550 && !p.isCaptured)) {
+                    ctx.fillStyle = (id === myId || me.team !== 'seeker') && p.fear > 80 ? "#962d22" : (p.isMoving ? "#333" : "#555");
+                    ctx.fillRect(p.x, p.y, 25, 25);
                 }
             }
         }
         ctx.restore();
-
         drawLighting(me);
         if(me.team === 'hider' && !me.isCaptured) { document.getElementById('fear-ui').classList.remove('hidden'); document.getElementById('fear-fill').style.width = me.fear + "%"; } 
         requestAnimationFrame(draw);
@@ -325,15 +293,13 @@
 
     function drawLighting(me) {
         if (!gameActive) return;
-        const camX = -me.x + canvas.width/2, camY = -me.y + canvas.height/2;
         vCtx.clearRect(0,0,vCanvas.width,vCanvas.height);
         if (me.team === 'seeker') {
             vCtx.fillStyle = "black"; vCtx.fillRect(0, 0, vCanvas.width, vCanvas.height);
             vCtx.globalCompositeOperation = 'destination-out';
             vCtx.beginPath(); vCtx.arc(canvas.width/2 + 12, canvas.height/2 + 12, 50, 0, Math.PI * 2); vCtx.fill();
             vCtx.beginPath(); vCtx.moveTo(canvas.width/2 + 12, canvas.height/2 + 12);
-            vCtx.arc(canvas.width/2 + 12, canvas.height/2 + 12, 550, me.angle - 0.6, me.angle + 0.6); vCtx.closePath(); vCtx.fill();
-            vCtx.globalCompositeOperation = 'source-over';
+            vCtx.arc(canvas.width/2 + 12, canvas.height/2 + 12, 550, me.angle - 0.6, me.angle + 0.6); vCtx.fill();
             ctx.drawImage(vCanvas, 0, 0);
         } else {
             ctx.save();
@@ -355,6 +321,7 @@
         document.getElementById('victory-desc').innerText = r;
     }
 
+    function showRoom(c) { document.getElementById('step-menu').classList.add('hidden'); document.getElementById('step-room').classList.remove('hidden'); document.getElementById('displayCode').innerText = c; }
     function resetToLobby() { gameActive = false; canvas.style.display = 'none'; document.getElementById('end-screen').style.display = 'none'; document.getElementById('lobby').style.display = 'block'; refreshUI(); }
     function requestBackToLobby() { if(isHost) { broadcast({type: 'BACK_LOBBY'}); resetToLobby(); } }
 
@@ -380,14 +347,6 @@
     window.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
     window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
     window.addEventListener('mousemove', e => { mousePos.x = e.clientX; mousePos.y = e.clientY; });
-    window.addEventListener('mousedown', e => {
-        const me = players[myId];
-        if(gameActive && !me.isCaptured && gameState === "HUNT" && me.team === 'seeker' && Date.now() - lastShockwave > 4000) {
-            lastShockwave = Date.now();
-            let wave = {type: 'SHOCKWAVE', x: me.x + 12, y: me.y + 12, owner: myId, maxR: mapW, waveType: 'seeker'};
-            waves.push({...wave, r:0}); broadcast(wave);
-        }
-    });
 </script>
 </body>
 </html>
