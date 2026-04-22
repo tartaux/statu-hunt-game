@@ -442,7 +442,7 @@
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         const camX = -me.x + canvas.width/2, camY = -me.y + canvas.height/2;
         
-        // 1. DESSIN DU MONDE
+        // 1. DESSIN DU MONDE (Inchangé)
         ctx.save(); 
         ctx.translate(camX, camY);
         ctx.strokeStyle = "#f1c40f"; ctx.lineWidth = 10; ctx.strokeRect(0,0, mapW, mapH);
@@ -472,52 +472,50 @@
         }
         ctx.restore();
 
-        // 2. SYSTÈME DE LUMIÈRE (MASQUE)
-        if (!me.isCaptured) {
-            if (me.team === 'seeker') {
-                ctx.save();
-                // On remplit l'écran de noir
-                ctx.fillStyle = "black";
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
+        // 2. SYSTÈME DE LUMIÈRE (MASQUE FIXÉ)
+        ctx.save();
+        if(me.team === 'seeker' && !me.isCaptured) {
+            ctx.fillStyle = "black";
+            ctx.beginPath();
+            
+            // Le grand rectangle noir (clockwise par défaut)
+            ctx.rect(0, 0, canvas.width, canvas.height);
 
-                // On change le mode pour "EFFACER" le noir là où on dessine
-                ctx.globalCompositeOperation = "destination-out";
+            if(gameState === "HUNT") {
+                // Les trous (aura + lampe) dessinés ANTI-CLOCKWISE (true) perceront le rect
+                
+                // 1. Aura autour du cube (un peu plus grande que le cube)
+                // Position centrale à l'écran : canvas.width/2 + 12.5 (moitié du cube de 25)
+                ctx.moveTo(canvas.width/2 + 12.5 + 45, canvas.height/2 + 12.5);
+                ctx.arc(canvas.width/2 + 12.5, canvas.height/2 + 12.5, 45, 0, Math.PI * 2, true);
 
-                if (gameState === "HUNT") {
-                    // Cercle autour du joueur (Aura de proximité)
-                    ctx.beginPath();
-                    ctx.arc(canvas.width/2 + 12, canvas.height/2 + 12, 60, 0, Math.PI * 2);
-                    ctx.fill();
-
-                    // Cône de la lampe
-                    ctx.beginPath();
-                    ctx.moveTo(canvas.width/2 + 12, canvas.height/2 + 12);
-                    ctx.arc(canvas.width/2 + 12, canvas.height/2 + 12, 550, me.angle - 0.55, me.angle + 0.55);
-                    ctx.lineTo(canvas.width/2 + 12, canvas.height/2 + 12);
-                    ctx.fill();
-                }
-                // Si PREP, on ne dessine rien en destination-out, donc tout reste noir.
-                ctx.restore();
-            } else if (me.team === 'hider') {
-                // Logique de visibilité pour le caché
-                ctx.save();
-                let g = ctx.createRadialGradient(canvas.width/2, canvas.height/2, 100, canvas.width/2, canvas.height/2, canvas.width);
-                g.addColorStop(0, "transparent"); g.addColorStop(1, "rgba(0,0,0,0.85)"); ctx.fillStyle = g; ctx.fillRect(0,0, canvas.width, canvas.height);
-                if(gameState === "HUNT") {
-                    for(let id in players) {
-                        let p = players[id];
-                        if(p.team === 'seeker') {
-                            ctx.save(); ctx.translate(camX + p.x + 12, camY + p.y + 12); ctx.rotate(p.angle);
-                            let b = ctx.createRadialGradient(0,0,50,0,0,550); b.addColorStop(0, "rgba(255,255,200,0.2)"); b.addColorStop(1, "transparent");
-                            ctx.fillStyle = b; ctx.beginPath(); ctx.moveTo(0,0); ctx.arc(0,0,550,-0.55,0.55); ctx.fill(); ctx.restore();
-                        }
+                // 2. Cône de la lampe
+                ctx.moveTo(canvas.width/2 + 12.5, canvas.height/2 + 12.5);
+                // arc(x, y, radius, startAngle, endAngle, anticlockwise)
+                ctx.arc(canvas.width/2 + 12.5, canvas.height/2 + 12.5, 550, me.angle - 0.55, me.angle + 0.55, true);
+                ctx.lineTo(canvas.width/2 + 12.5, canvas.height/2 + 12.5);
+            }
+            // Si PREP, on ne dessine aucune excavation, donc tout reste noir.
+            
+            ctx.fill();
+        } else if(me.team === 'hider' && !me.isCaptured) {
+            // Logique de visibilité pour le caché (Vignettage + lampes seekers)
+            let g = ctx.createRadialGradient(canvas.width/2, canvas.height/2, 100, canvas.width/2, canvas.height/2, canvas.width);
+            g.addColorStop(0, "transparent"); g.addColorStop(1, "rgba(0,0,0,0.85)"); ctx.fillStyle = g; ctx.fillRect(0,0, canvas.width, canvas.height);
+            if(gameState === "HUNT") {
+                for(let id in players) {
+                    let p = players[id];
+                    if(p.team === 'seeker') {
+                        ctx.save(); ctx.translate(camX + p.x + 12.5, camY + p.y + 12.5); ctx.rotate(p.angle);
+                        let b = ctx.createRadialGradient(0,0,50,0,0,550); b.addColorStop(0, "rgba(255,255,200,0.2)"); b.addColorStop(1, "transparent");
+                        ctx.fillStyle = b; ctx.beginPath(); ctx.moveTo(0,0); ctx.arc(0,0,550,-0.55,0.55); ctx.fill(); ctx.restore();
                     }
                 }
-                ctx.restore();
             }
         }
+        ctx.restore();
 
-        // 3. EFFETS PAR DESSUS L'OBSCURITÉ (Flèches, vagues buissons)
+        // 3. EFFETS PAR DESSUS L'OBSCURITÉ (Vagues buissons, flèches)
         ctx.save(); ctx.translate(camX, camY);
         waves.forEach(w => {
             if(w.isBushWave) {
@@ -530,7 +528,7 @@
         if(me.team === 'seeker' && !me.isCaptured) {
             detectionArrows.forEach(arr => {
                 const opacity = arr.life / 60; const distance = 120 + (1 - opacity) * 80;
-                ctx.save(); ctx.translate(canvas.width/2 + 12, canvas.height/2 + 12); ctx.rotate(arr.angle);
+                ctx.save(); ctx.translate(canvas.width/2 + 12.5, canvas.height/2 + 12.5); ctx.rotate(arr.angle);
                 ctx.beginPath(); ctx.arc(0, 0, distance, -Math.PI/6, Math.PI/6);
                 ctx.shadowBlur = 20 * opacity; ctx.shadowColor = "#f1c40f"; ctx.strokeStyle = `rgba(241, 196, 15, ${opacity})`;
                 ctx.lineWidth = 6 * opacity + 2; ctx.lineCap = "round"; ctx.stroke(); ctx.restore();
@@ -543,11 +541,12 @@
         requestAnimationFrame(draw);
     }
 
+    // -- Fonctions de dessin utilitaires (Inchangées, sauf ajustement centre 12.5) --
     function drawStunStars(x, y) {
         const time = Date.now() * 0.005;
         for(let i=0; i<3; i++) {
             const angle = time + (i * Math.PI * 2 / 3);
-            const sx = x + 12 + Math.cos(angle) * 20; const sy = y - 10 + Math.sin(angle) * 8;
+            const sx = x + 12.5 + Math.cos(angle) * 20; const sy = y - 10 + Math.sin(angle) * 8;
             ctx.fillStyle = "#f1c40f"; ctx.beginPath();
             for(let j=0; j<5; j++) ctx.lineTo(sx + Math.cos(j*Math.PI*0.8)*6, sy + Math.sin(j*Math.PI*0.8)*6);
             ctx.closePath(); ctx.fill();
@@ -558,7 +557,7 @@
         ctx.save();
         if(!isGhost && fearValue > 50) { let intensity = (fearValue - 50) / 10; x += (Math.random() - 0.5) * intensity; y += (Math.random() - 0.5) * intensity; }
         if(isGhost) { ctx.fillStyle = "rgba(255,255,255,0.4)"; ctx.beginPath(); ctx.ellipse(x-5, y+10, 10, 5, -0.5, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.ellipse(x+30, y+10, 10, 5, 0.5, 0, Math.PI*2); ctx.fill(); }
-        else { ctx.fillStyle = "rgba(0,0,0,0.4)"; ctx.beginPath(); ctx.ellipse(x+12, y+28, 15, 6, 0, 0, Math.PI*2); ctx.fill(); }
+        else { ctx.fillStyle = "rgba(0,0,0,0.4)"; ctx.beginPath(); ctx.ellipse(x+12.5, y+28, 15, 6, 0, 0, Math.PI*2); ctx.fill(); }
         ctx.fillStyle = color; ctx.fillRect(x, y, 25, 25);
         if(isSelf && !isGhost) { ctx.fillStyle = "#f1c40f"; ctx.fillRect(x+10, y-5, 5, 5); }
         ctx.restore();
@@ -566,6 +565,7 @@
 
     function drawSeeker(p) { ctx.fillStyle = "#3498db"; ctx.fillRect(p.x, p.y, 25, 25); ctx.strokeStyle = "white"; ctx.strokeRect(p.x, p.y, 25, 25); }
 
+    // -- Logique Serveur / Génération --
     function generateMapForHost() {
         let seed = 0; for(let i=0; i<roomCode.length; i++) seed += roomCode.charCodeAt(i);
         const pseudoRand = () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; };
@@ -607,6 +607,7 @@
 
     function requestStart() { if(isHost) { randomizeSpawns(); generateMapForHost(); broadcast({ type: 'START', players: players, statues: statues, bushes: bushes }); setTimeout(startClientGame, 200); } }
 
+    // -- Inputs --
     window.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
     window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
     window.addEventListener('mousemove', e => { mousePos.x = e.clientX; mousePos.y = e.clientY; });
@@ -616,7 +617,8 @@
         if(me.team === 'seeker' && e.button === 0) {
             if(Date.now() - lastShockwave > 4000) {
                 lastShockwave = Date.now();
-                let waveData = {type: 'SHOCKWAVE', x: me.x + 12, y: me.y + 12, owner: myId, maxR: mapW, waveType: 'seeker', isBushWave: false};
+                // Utilisation du centre 12.5
+                let waveData = {type: 'SHOCKWAVE', x: me.x + 12.5, y: me.y + 12.5, owner: myId, maxR: mapW, waveType: 'seeker', isBushWave: false};
                 waves.push({x: waveData.x, y: waveData.y, r: 0, maxR: mapW, owner: myId, waveType: 'seeker', isBushWave: false});
                 if(isHost) broadcast(waveData); else if(hostConn && hostConn.open) hostConn.send(waveData);
             }
