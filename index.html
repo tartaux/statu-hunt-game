@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Statu Hunt - Final Sync</title>
+    <title>Statu Hunt - Ghost Spectator</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         body { margin: 0; background: #0a0a0a; color: white; font-family: 'Segoe UI', sans-serif; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; }
@@ -254,6 +254,7 @@
         lastUpdate = now;
         let moved = false;
         if(!(me.team === 'seeker' && gameState === "PREP")) {
+            // Un spectre se déplace plus vite pour pouvoir bien observer
             let spd = (me.isCaptured ? 8 : (me.team === 'seeker' ? 6 : 4.5)) * dt;
             if(keys['z'] || keys['w']) { me.y -= spd; moved = true; }
             if(keys['s']) { me.y += spd; moved = true; }
@@ -273,6 +274,7 @@
             if(gameState === "HUNT") {
                 for(let id in players) {
                     let p = players[id];
+                    // On ne peut capturer que les joueurs vivants
                     if(id !== myId && p.team === 'hider' && !p.isCaptured && Math.sqrt((me.x - p.x)**2 + (me.y - p.y)**2) < 40) {
                         if(isHost) { players[id].isCaptured = true; broadcast({type: 'SYNC', players: players}); checkWinCondition(); }
                         else if(hostConn?.open) hostConn.send({type: 'CAPTURE', targetId: id});
@@ -337,22 +339,50 @@
 
         for(let id in players) {
             let p = players[id];
-            if(p.isCaptured) continue;
-
+            
+            // LOGIQUE DE DESSIN SELON L'ÉTAT (VIVANT/MORT) ET LA TEAM
             if(p.team === 'hider') {
-                ctx.fillStyle = (id === myId || me.team !== 'seeker') && p.fear > 80 ? "#962d22" : (p.isMoving ? "#333" : "#555");
-                ctx.fillRect(p.x, p.y, 25, 25);
+                if (p.isCaptured) {
+                    // SI CAPTURÉ : Seul le joueur lui-même se voit (en spectre blanc avec ailes)
+                    if (id === myId) {
+                        ctx.save();
+                        ctx.fillStyle = "white";
+                        ctx.fillRect(p.x, p.y, 25, 25);
+                        // Dessin des petites ailes
+                        ctx.strokeStyle = "white";
+                        ctx.lineWidth = 2;
+                        let wingY = p.y + 10 + Math.sin(Date.now()/100) * 5; // Animation battement
+                        ctx.beginPath(); // Aile gauche
+                        ctx.moveTo(p.x, p.y + 12); ctx.lineTo(p.x - 15, wingY); ctx.lineTo(p.x, p.y + 5);
+                        ctx.stroke();
+                        ctx.beginPath(); // Aile droite
+                        ctx.moveTo(p.x + 25, p.y + 12); ctx.lineTo(p.x + 40, wingY); ctx.lineTo(p.x + 25, p.y + 5);
+                        ctx.stroke();
+                        
+                        ctx.fillStyle = "white";
+                        ctx.font = "bold 12px Arial";
+                        ctx.textAlign = "center";
+                        ctx.fillText("SPECTRE", p.x + 12, p.y - 10);
+                        ctx.restore();
+                    }
+                    // Les autres ne voient rien (invisible)
+                } else {
+                    // SI VIVANT : Dessin normal
+                    ctx.fillStyle = (id === myId || me.team !== 'seeker') && p.fear > 80 ? "#962d22" : (p.isMoving ? "#333" : "#555");
+                    ctx.fillRect(p.x, p.y, 25, 25);
 
-                if (me.team === 'hider') {
-                    ctx.strokeStyle = "rgba(46, 204, 113, 0.5)";
-                    ctx.lineWidth = 2;
-                    ctx.strokeRect(p.x - 2, p.y - 2, 29, 29);
-                    ctx.fillStyle = "white";
-                    ctx.font = "bold 12px Arial";
-                    ctx.textAlign = "center";
-                    ctx.fillText(p.pseudo, p.x + 12, p.y - 10);
+                    if (me.team === 'hider') {
+                        ctx.strokeStyle = "rgba(46, 204, 113, 0.5)";
+                        ctx.lineWidth = 2;
+                        ctx.strokeRect(p.x - 2, p.y - 2, 29, 29);
+                        ctx.fillStyle = "white";
+                        ctx.font = "bold 12px Arial";
+                        ctx.textAlign = "center";
+                        ctx.fillText(p.pseudo, p.x + 12, p.y - 10);
+                    }
                 }
             } else {
+                // CHERCHEUR : Toujours visible
                 ctx.save();
                 ctx.translate(p.x + 12, p.y + 12);
                 ctx.rotate(p.angle);
@@ -393,7 +423,7 @@
     }
 
     function drawLighting(me) {
-        if (!gameActive || me.isCaptured) return;
+        if (!gameActive) return;
         const camX = -me.x + canvas.width/2, camY = -me.y + canvas.height/2;
 
         if (me.team === 'seeker') {
@@ -416,6 +446,7 @@
             });
             ctx.drawImage(vCanvas, 0, 0);
         } else {
+            // Hider (vivant ou spectre) voient la zone autour d'eux
             ctx.save();
             let g = ctx.createRadialGradient(canvas.width/2, canvas.height/2, 100, canvas.width/2, canvas.height/2, canvas.width);
             g.addColorStop(0, "transparent"); g.addColorStop(1, "rgba(0,0,0,0.85)");
@@ -491,6 +522,7 @@
     window.addEventListener('mousemove', e => { mousePos.x = e.clientX; mousePos.y = e.clientY; });
     window.addEventListener('mousedown', e => {
         const me = players[myId];
+        // Seuls les chercheurs vivants peuvent envoyer des ondes radar
         if(gameActive && !me.isCaptured && gameState === "HUNT" && me.team === 'seeker' && Date.now() - lastShockwave > 4000) {
             lastShockwave = Date.now();
             let wave = {type: 'SHOCKWAVE', x: me.x + 12, y: me.y + 12, owner: myId, maxR: mapW, waveType: 'seeker'};
