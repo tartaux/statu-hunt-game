@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Statu Hunt - Final Fix</title>
+    <title>Statu Hunt - Ally Visibility Fix</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         body { margin: 0; background: #0a0a0a; color: white; font-family: 'Segoe UI', sans-serif; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; }
@@ -338,9 +338,7 @@
         for(let id in players) {
             let p = players[id];
             
-            // LOGIQUE DE DESSIN STRICTE : Seul p.team détermine le skin
             if(p.team === 'seeker') {
-                // SKIN CHERCHEUR (GARDE)
                 ctx.save(); ctx.translate(p.x + 12, p.y + 12); ctx.rotate(p.angle);
                 ctx.fillStyle = "#2980b9"; ctx.strokeStyle = "#3498db"; ctx.lineWidth = 3;
                 ctx.beginPath(); ctx.roundRect(-15, -15, 30, 30, 5); ctx.fill(); ctx.stroke();
@@ -350,7 +348,6 @@
                 ctx.fillStyle = "#3498db"; ctx.font = "bold 14px Arial"; ctx.textAlign = "center";
                 ctx.fillText(p.pseudo, p.x + 12, p.y - 18);
             } else if (p.team === 'hider') {
-                // SKIN CACHÉ (CARRÉ)
                 if (p.isCaptured) {
                     if (id === myId) {
                         ctx.save();
@@ -363,8 +360,11 @@
                         ctx.fillText("SPECTRE", p.x + 12, p.y - 10); ctx.restore();
                     }
                 } else {
-                    // Les Hiders vivants voient leurs alliés vivants, le chercheur les voit s'ils sont proches
-                    if (me.team === 'hider' || (me.team === 'seeker' && Math.sqrt((me.x-p.x)**2 + (me.y-p.y)**2) < 600)) {
+                    // FIX VISIBILITÉ ALLIÉS : Si je suis un Hider, je vois TOUS les Hiders vivants sans condition.
+                    // Si je suis un Seeker, je ne vois que s'ils sont à moins de 600px (portée max visuelle).
+                    let canSee = (me.team === 'hider') || (me.team === 'seeker' && Math.sqrt((me.x-p.x)**2 + (me.y-p.y)**2) < 600);
+                    
+                    if (canSee) {
                          ctx.fillStyle = (id === myId || me.team !== 'seeker') && p.fear > 80 ? "#962d22" : (p.isMoving ? "#333" : "#555");
                          ctx.fillRect(p.x, p.y, 25, 25);
                          if (me.team === 'hider') {
