@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Statu Hunt - Spawn Sync Fix</title>
+    <title>Statu Hunt - Final Sync</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         body { margin: 0; background: #0a0a0a; color: white; font-family: 'Segoe UI', sans-serif; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; }
@@ -168,7 +168,6 @@
             if(data.type === 'START') { 
                 statues = data.statues; 
                 bushes = data.bushes; 
-                // Synchronisation forcée des positions envoyées par l'host
                 for(let id in data.playerStarts) {
                     if(players[id]) {
                         players[id].x = data.playerStarts[id].x;
@@ -339,8 +338,42 @@
         for(let id in players) {
             let p = players[id];
             if(p.isCaptured) continue;
-            if(p.team === 'hider') { ctx.fillStyle = (id === myId || me.team !== 'seeker') && p.fear > 80 ? "#962d22" : (p.isMoving ? "#333" : "#555"); ctx.fillRect(p.x, p.y, 25, 25); }
-            else { ctx.fillStyle = "#3498db"; ctx.fillRect(p.x, p.y, 25, 25); }
+
+            if(p.team === 'hider') {
+                ctx.fillStyle = (id === myId || me.team !== 'seeker') && p.fear > 80 ? "#962d22" : (p.isMoving ? "#333" : "#555");
+                ctx.fillRect(p.x, p.y, 25, 25);
+
+                if (me.team === 'hider') {
+                    ctx.strokeStyle = "rgba(46, 204, 113, 0.5)";
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(p.x - 2, p.y - 2, 29, 29);
+                    ctx.fillStyle = "white";
+                    ctx.font = "bold 12px Arial";
+                    ctx.textAlign = "center";
+                    ctx.fillText(p.pseudo, p.x + 12, p.y - 10);
+                }
+            } else {
+                ctx.save();
+                ctx.translate(p.x + 12, p.y + 12);
+                ctx.rotate(p.angle);
+                ctx.fillStyle = "#2980b9";
+                ctx.strokeStyle = "#3498db";
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.roundRect(-15, -15, 30, 30, 5);
+                ctx.fill();
+                ctx.stroke();
+                ctx.fillStyle = "#ecf0f1";
+                ctx.fillRect(5, -8, 5, 16); 
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = "#3498db";
+                ctx.stroke();
+                ctx.restore();
+                ctx.fillStyle = "#3498db";
+                ctx.font = "bold 14px Arial";
+                ctx.textAlign = "center";
+                ctx.fillText(p.pseudo, p.x + 12, p.y - 18);
+            }
         }
         ctx.restore();
 
@@ -421,11 +454,9 @@
 
     function generateMapForHost() {
         statues = [];
-        // Utilisation d'une grille pour éviter les chevauchements
         let step = mapSizeKey === 'S' ? 120 : mapSizeKey === 'M' ? 100 : 80;
         for(let x = 100; x < mapW - 100; x += step) {
             for(let y = 100; y < mapH - 100; y += step) {
-                // On ajoute un décalage aléatoire (jitter) pour ne pas faire un damier parfait
                 statues.push({
                     x: x + (Math.random() - 0.5) * (step * 0.6),
                     y: y + (Math.random() - 0.5) * (step * 0.6)
@@ -440,31 +471,18 @@
     function requestStart() { 
         if(!isHost) return;
         generateMapForHost();
-        
-        // Calcul des positions de spawn circulaires pour éviter le spawn-stacking
         let playerStarts = {};
         let playerIds = Object.keys(players);
         let centerX = mapW / 2, centerY = mapH / 2, radius = 400;
-        
         playerIds.forEach((id, index) => {
             let angle = (index / playerIds.length) * Math.PI * 2;
-            playerStarts[id] = {
-                x: centerX + Math.cos(angle) * radius,
-                y: centerY + Math.sin(angle) * radius
-            };
-            // Appliquer localement aussi
+            playerStarts[id] = { x: centerX + Math.cos(angle) * radius, y: centerY + Math.sin(angle) * radius };
             players[id].x = playerStarts[id].x;
             players[id].y = playerStarts[id].y;
             players[id].isCaptured = false;
             players[id].fear = 0;
         });
-
-        broadcast({ 
-            type: 'START', 
-            statues: statues, 
-            bushes: bushes, 
-            playerStarts: playerStarts 
-        }); 
+        broadcast({ type: 'START', statues: statues, bushes: bushes, playerStarts: playerStarts }); 
         startClientGame(); 
     }
 
